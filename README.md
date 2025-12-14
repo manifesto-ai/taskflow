@@ -124,10 +124,6 @@ This project uses a **2-LLM architecture** that separates intent parsing from re
 - Storage layer (IndexedDB / localStorage)
 - Intent validation and execution pipeline
 
-### Advanced research directions
-
-More sophisticated architectures (e.g., ICAA—Intent-Centric Agent Architecture, multi-agent orchestration, policy learning) are explored **outside this repository**. This demo focuses on the foundational runtime pattern.
-
 ---
 
 ## Who This Demo Is For

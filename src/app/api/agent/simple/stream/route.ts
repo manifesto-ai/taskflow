@@ -1,9 +1,9 @@
 /**
  * Simple Intent API Stream Route (SSE)
  *
- * 2-LLM 아키텍처:
- * 1차 LLM: Intent 파싱 (사용자 의도 구조화)
- * 2차 LLM: Response 생성 (처리 결과 기반 자연어 응답)
+ * 2-LLM Architecture:
+ * 1st LLM: Intent parsing (structure user intent)
+ * 2nd LLM: Response generation (natural language response based on execution result)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -24,16 +24,7 @@ interface SimpleIntentRequest {
 }
 
 // ============================================
-// Language Detection
-// ============================================
-
-function detectLanguage(text: string): 'ko' | 'en' {
-  const koreanRegex = /[\uAC00-\uD7AF]/;
-  return koreanRegex.test(text) ? 'ko' : 'en';
-}
-
-// ============================================
-// 1차 LLM: Intent Parser Prompt
+// 1st LLM: Intent Parser Prompt
 // ============================================
 
 function getIntentParserPrompt(): string {
@@ -80,53 +71,41 @@ function getIntentParserPrompt(): string {
 2. **"this/it" = selected task** - Refer to Currently Selected Task in context.
 3. **Calculate dates** - "tomorrow" → ${tomorrowStr}, "next Tuesday" → compute YYYY-MM-DD.
 4. **Questions & Chat → QueryTasks** - Greetings, questions, casual chat all use QueryTasks.
-5. **Avoid RequestClarification** - Only when genuinely ambiguous (0 or 2+ matches).
+5. **Missing title → RequestClarification** - "Add a task" without specifying WHAT → RequestClarification with reason="missing_title".
 6. **Assign = UpdateTask** - "assign to X" → UpdateTask with changes.assignee.
+
+## RequestClarification Format
+When information is missing or ambiguous:
+{
+  "kind": "RequestClarification",
+  "reason": "missing_title" | "which_task" | "ambiguous_action" | "multiple_matches",
+  "question": "What task would you like to add?",
+  "originalInput": "user's original input",
+  "confidence": 0.5,
+  "source": "agent"
+}
 
 ⚠️ DO NOT include "message" or "answer" fields. Only structured intent data.`;
 }
 
 // ============================================
-// 2차 LLM: Response Generator
+// 2nd LLM: Response Generator
 // ============================================
 
-function getResponseGeneratorPrompt(language: 'ko' | 'en'): string {
-  const langInstruction = language === 'ko'
-    ? '한국어로 응답하세요.'
-    : 'Respond in English.';
+function getResponseGeneratorPrompt(): string {
+  return `You are a friendly Task Assistant. Generate natural, conversational responses.
 
-  return `You are a Task Assistant. Generate a natural response based on what happened.
-
-${langInstruction}
-
-## Response Rules
-1. Use past tense (what was done)
+## Rules
+1. **Respond in the SAME LANGUAGE as the user's input** (detect from User's Original Request)
 2. Be concise (1-2 sentences max)
-3. For QueryTasks: Answer the user's question directly based on the task data
-4. For errors: Explain briefly
-5. Be friendly but not overly enthusiastic
+3. For task operations: briefly confirm what was done
+4. For QueryTasks: answer the user's question based on the task data provided
+5. For off-topic questions (weather, news, etc.): politely say you can only help with tasks
+6. For greetings: respond warmly and offer to help with tasks
+7. Be friendly and human-like
 
 ## Output Format (JSON)
-{ "message": "your response" }
-
-## Examples (${language === 'ko' ? 'Korean' : 'English'})
-${language === 'ko' ? `
-- CreateTask: "로그인 태스크를 추가했어요."
-- ChangeStatus to done: "태스크를 완료 처리했어요."
-- ChangeView to kanban: "칸반 보드로 전환했어요."
-- DeleteTask: "태스크를 삭제했어요."
-- QueryTasks (count): "현재 3개의 태스크가 있어요."
-- QueryTasks (greeting): "안녕하세요! 무엇을 도와드릴까요?"
-- SelectTask: "태스크를 선택했어요."
-` : `
-- CreateTask: "Added the login task."
-- ChangeStatus to done: "Marked the task as done."
-- ChangeView to kanban: "Switched to kanban board."
-- DeleteTask: "Deleted the task."
-- QueryTasks (count): "You have 3 tasks."
-- QueryTasks (greeting): "Hello! How can I help you?"
-- SelectTask: "Selected the task."
-`}`;
+{ "message": "your response" }`;
 }
 
 interface ResponseGeneratorInput {
@@ -134,14 +113,13 @@ interface ResponseGeneratorInput {
   intent: Intent;
   executionResult: ExecutionResult;
   snapshot: Snapshot;
-  language: 'ko' | 'en';
 }
 
 async function generateResponse(
   openai: OpenAI,
   input: ResponseGeneratorInput
 ): Promise<string> {
-  const { instruction, intent, executionResult, snapshot, language } = input;
+  const { instruction, intent, executionResult, snapshot } = input;
 
   // Build context for response generation
   const activeTasks = snapshot.data.tasks.filter(t => !t.deletedAt);
@@ -185,7 +163,7 @@ Generate a natural response message.`;
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: getResponseGeneratorPrompt(language) },
+        { role: 'system', content: getResponseGeneratorPrompt() },
         { role: 'user', content: userMessage },
       ],
       response_format: { type: 'json_object' },
@@ -205,28 +183,25 @@ Generate a natural response message.`;
   }
 
   // Fallback to simple message
-  return getDefaultMessage(intent, language);
+  return getDefaultMessage(intent);
 }
 
-function getDefaultMessage(intent: Intent, language: 'ko' | 'en'): string {
-  const messages: Record<string, { ko: string; en: string }> = {
-    CreateTask: { ko: '태스크를 추가했어요.', en: 'Added the task.' },
-    ChangeStatus: { ko: '상태를 변경했어요.', en: 'Changed the status.' },
-    UpdateTask: { ko: '태스크를 수정했어요.', en: 'Updated the task.' },
-    DeleteTask: { ko: '태스크를 삭제했어요.', en: 'Deleted the task.' },
-    RestoreTask: { ko: '태스크를 복원했어요.', en: 'Restored the task.' },
-    SelectTask: { ko: '태스크를 선택했어요.', en: 'Selected the task.' },
-    QueryTasks: { ko: '질문에 답변했어요.', en: 'Here\'s what I found.' },
-    ChangeView: { ko: '뷰를 변경했어요.', en: 'Changed the view.' },
-    SetDateFilter: { ko: '필터를 적용했어요.', en: 'Applied the filter.' },
-    Undo: { ko: '마지막 작업을 취소했어요.', en: 'Undid the last action.' },
-    RequestClarification: {
-      ko: (intent as { question?: string }).question || '확인이 필요해요.',
-      en: (intent as { question?: string }).question || 'Need clarification.',
-    },
+function getDefaultMessage(intent: Intent): string {
+  const messages: Record<string, string> = {
+    CreateTask: 'Added the task.',
+    ChangeStatus: 'Changed the status.',
+    UpdateTask: 'Updated the task.',
+    DeleteTask: 'Deleted the task.',
+    RestoreTask: 'Restored the task.',
+    SelectTask: 'Selected the task.',
+    QueryTasks: "Here's what I found.",
+    ChangeView: 'Changed the view.',
+    SetDateFilter: 'Applied the filter.',
+    Undo: 'Undid the last action.',
+    RequestClarification: (intent as { question?: string }).question || 'Need clarification.',
   };
 
-  return messages[intent.kind]?.[language] || (language === 'ko' ? '완료되었어요.' : 'Done.');
+  return messages[intent.kind] || 'Done.';
 }
 
 // ============================================
@@ -282,9 +257,6 @@ export async function POST(request: NextRequest) {
         }
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-        // 0. Detect user's language
-        const language = detectLanguage(instruction);
 
         // 1. Start event
         sendSSE(controller, 'start', {});
@@ -369,16 +341,13 @@ Output only a valid JSON Intent object (no message field).`;
           intent,
           executionResult,
           snapshot,
-          language,
         });
 
         // 9. Handle execution failure
         if (!executionResult.success) {
           sendSSE(controller, 'done', {
             effects: [],
-            message: language === 'ko'
-              ? `처리 중 오류가 발생했어요: ${executionResult.error}`
-              : `Error occurred: ${executionResult.error}`,
+            message: `Error occurred: ${executionResult.error}`,
           });
           controller.close();
           return;

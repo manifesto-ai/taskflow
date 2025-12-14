@@ -45,14 +45,18 @@ export function AgentExecutionCard({ message }: AgentExecutionCardProps) {
               {isComplete && (
                 <Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
               )}
-              <TextEffect
-                per="char"
-                preset="fade"
-                speedReveal={1.5}
-                className="text-sm text-foreground"
-              >
-                {message.summary}
-              </TextEffect>
+              {message.skipAnimation ? (
+                <span className="text-sm text-foreground">{message.summary}</span>
+              ) : (
+                <TextEffect
+                  per="char"
+                  preset="fade"
+                  speedReveal={1.5}
+                  className="text-sm text-foreground"
+                >
+                  {message.summary}
+                </TextEffect>
+              )}
             </div>
           )}
         </div>

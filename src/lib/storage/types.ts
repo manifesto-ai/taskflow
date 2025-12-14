@@ -43,12 +43,24 @@ export type ViewMode = 'todo' | 'kanban' | 'table' | 'trash';
 // Re-export DateFilter from date-range-picker
 export type { DateFilter } from '@/components/ui/date-range-picker';
 
+/** 채팅 메시지 */
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
 /** 영속화할 데이터 구조 */
 export interface StorageData {
   version: number;
   tasks: Task[];
   viewMode: ViewMode;
   dateFilter: DateFilter | null;
+  // v2: 채팅 히스토리 추가
+  selectedTaskId: string | null;
+  chatHistory: ChatMessage[];
+  lastSessionAt: string;
 }
 
 // ============================================
@@ -56,4 +68,5 @@ export interface StorageData {
 // ============================================
 
 export const STORAGE_KEY = 'taskflow-data';
-export const STORAGE_VERSION = 1;
+export const STORAGE_VERSION = 2;
+export const MAX_CHAT_MESSAGES = 100;

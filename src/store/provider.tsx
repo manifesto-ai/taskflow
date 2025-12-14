@@ -135,6 +135,9 @@ export function TasksProvider({ children }: TasksProviderProps) {
           tasks: state.tasks,
           viewMode: state.viewMode,
           dateFilter: state.dateFilter,
+          selectedTaskId: state.selectedTaskId,
+          chatHistory: state.chatHistory,
+          lastSessionAt: new Date().toISOString(),
         });
       } catch (error) {
         console.error('[Provider] Failed to save to storage:', error);
@@ -154,6 +157,13 @@ export function TasksProvider({ children }: TasksProviderProps) {
           store.setTasks(storedData.tasks);
           store.setViewMode(storedData.viewMode);
           store.setDateFilter(storedData.dateFilter);
+          if (storedData.selectedTaskId) {
+            store.setSelectedTaskId(storedData.selectedTaskId);
+          }
+          if (storedData.chatHistory?.length > 0) {
+            store.setChatHistory(storedData.chatHistory);
+            console.log(`[Provider] Loaded ${storedData.chatHistory.length} chat messages`);
+          }
           console.log(`[Provider] Loaded ${storedData.tasks.length} tasks from ${storage.strategyName}`);
         } else if (store.tasks.length === 0) {
           // Use sample data as fallback
@@ -186,11 +196,13 @@ export function TasksProvider({ children }: TasksProviderProps) {
     if (!isHydrated) return;
 
     const unsubscribe = useTasksStore.subscribe((state, prevState) => {
-      // Only save when tasks, viewMode, or dateFilter change
+      // Save when tasks, viewMode, dateFilter, selectedTaskId, or chatHistory change
       if (
         state.tasks !== prevState.tasks ||
         state.viewMode !== prevState.viewMode ||
-        state.dateFilter !== prevState.dateFilter
+        state.dateFilter !== prevState.dateFilter ||
+        state.selectedTaskId !== prevState.selectedTaskId ||
+        state.chatHistory !== prevState.chatHistory
       ) {
         debouncedSave();
       }

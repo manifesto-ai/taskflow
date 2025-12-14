@@ -13,6 +13,8 @@ import {
 } from '@manifesto-ai/bridge-zustand';
 import { tasksDomain, type Task, type TaskFilter } from '../domain/tasks';
 import type { DateFilter } from '@/components/ui/date-range-picker';
+import type { ChatMessage } from '@/lib/storage/types';
+import { MAX_CHAT_MESSAGES } from '@/lib/storage/types';
 
 // View mode type (including trash)
 export type ViewMode = 'todo' | 'kanban' | 'table' | 'trash';
@@ -34,6 +36,8 @@ interface TasksStore {
   lastCreatedTaskIds: string[];
   /** ID of recently modified task */
   lastModifiedTaskId: string | null;
+  /** Chat history for assistant */
+  chatHistory: ChatMessage[];
 
   // Actions (Zustand-level mutations)
   setTasks: (tasks: Task[]) => void;
@@ -53,6 +57,9 @@ interface TasksStore {
   setDateFilter: (filter: DateFilter | null) => void;
   setLastCreatedTaskIds: (ids: string[]) => void;
   setLastModifiedTaskId: (id: string | null) => void;
+  setChatHistory: (messages: ChatMessage[]) => void;
+  addChatMessage: (message: ChatMessage) => void;
+  clearChatHistory: () => void;
 }
 
 // Create Zustand store
@@ -70,6 +77,7 @@ export const useTasksStore = create<TasksStore>((set) => ({
   dateFilter: null,
   lastCreatedTaskIds: [],
   lastModifiedTaskId: null,
+  chatHistory: [],
 
   // Actions
   setTasks: (tasks) => set({ tasks }),
@@ -117,6 +125,13 @@ export const useTasksStore = create<TasksStore>((set) => ({
   setDateFilter: (dateFilter) => set({ dateFilter }),
   setLastCreatedTaskIds: (lastCreatedTaskIds) => set({ lastCreatedTaskIds }),
   setLastModifiedTaskId: (lastModifiedTaskId) => set({ lastModifiedTaskId }),
+  setChatHistory: (chatHistory) => set({ chatHistory }),
+  addChatMessage: (message) => set((state) => {
+    const updated = [...state.chatHistory, message];
+    // Trim to max messages
+    return { chatHistory: updated.slice(-MAX_CHAT_MESSAGES) };
+  }),
+  clearChatHistory: () => set({ chatHistory: [] }),
 }));
 
 // Create Manifesto runtime

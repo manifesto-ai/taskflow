@@ -60,7 +60,7 @@ export function DateRangePicker({
   placeholder = 'Filter by date',
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false);
-  const [selectedField, setSelectedField] = React.useState<DateFilterField>(value?.field ?? 'dueDate');
+  const [selectedField, setSelectedField] = React.useState<DateFilterField>(value?.field ?? 'createdAt');
   const [selectedType, setSelectedType] = React.useState<DateFilterType>(value?.type ?? 'all');
   const [customRange, setCustomRange] = React.useState<DateRange | undefined>(
     value?.type === 'custom' && value.startDate && value.endDate
@@ -151,10 +151,15 @@ export function DateRangePicker({
           <CalendarIcon className="h-3.5 w-3.5" />
           <span>{getDisplayText()}</span>
           {value && (
-            <X
-              className="h-3.5 w-3.5 opacity-70 hover:opacity-100"
+            <span
+              role="button"
+              tabIndex={0}
+              className="ml-1 rounded-sm hover:bg-background/20 p-0.5"
               onClick={handleClear}
-            />
+              onKeyDown={(e) => e.key === 'Enter' && handleClear(e as unknown as React.MouseEvent)}
+            >
+              <X className="h-3.5 w-3.5 opacity-70 hover:opacity-100" />
+            </span>
           )}
         </Button>
       </PopoverTrigger>

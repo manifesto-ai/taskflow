@@ -134,14 +134,24 @@ class StorageProvider {
   }
 
   /**
-   * 버전 마이그레이션 (향후 스키마 변경 시 사용)
+   * 버전 마이그레이션
    */
   private migrate(data: StorageData): StorageData {
-    // Currently no migrations needed
-    // Add migration logic here when schema changes
+    let migrated = { ...data };
+
+    // v1 → v2: chatHistory, selectedTaskId, lastSessionAt 추가
+    if (data.version === 1) {
+      migrated = {
+        ...migrated,
+        selectedTaskId: null,
+        chatHistory: [],
+        lastSessionAt: new Date().toISOString(),
+      };
+      console.log('[Storage] Migrated v1 → v2: added chatHistory');
+    }
 
     return {
-      ...data,
+      ...migrated,
       version: STORAGE_VERSION,
     };
   }

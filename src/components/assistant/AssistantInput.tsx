@@ -42,7 +42,7 @@ export function AssistantInput({
   };
 
   return (
-    <div className="border-t bg-background px-3 sm:px-4 py-3 safe-area-bottom">
+    <div className="border-t bg-background px-3 sm:px-4 pt-3 pb-6 safe-area-bottom">
       <PromptInput
         value={input}
         onValueChange={setInput}
@@ -51,7 +51,7 @@ export function AssistantInput({
         disabled={isLoading}
         maxHeight={200}
         inputRef={inputRef}
-        className="relative flex items-end gap-2 rounded-2xl border-border/50 bg-muted/50 p-1.5 pl-3"
+        className="relative flex items-end gap-2 rounded-2xl border-border/50 bg-muted/50 p-1.5 pl-3 mb-3"
       >
         <PromptInputTextarea
           placeholder={placeholder}

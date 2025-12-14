@@ -104,6 +104,8 @@ export interface AgentExecutionMessage extends BaseMessage {
   steps: AgentStep[];
   summary: string;
   status: 'running' | 'completed' | 'failed';
+  /** Skip text animation (for restored messages) */
+  skipAnimation?: boolean;
 }
 
 /**

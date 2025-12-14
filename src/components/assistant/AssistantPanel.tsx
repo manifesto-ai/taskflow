@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { AssistantHeader } from './AssistantHeader';
 import { AssistantMessages } from './AssistantMessages';
 import { AssistantInput } from './AssistantInput';
@@ -16,6 +16,7 @@ import type {
 import { generateMessageId as genId } from '@/types/assistant';
 import type { Task } from '@/domain/tasks';
 import type { AgentStep, AgentEffect } from '@/lib/agents/types';
+import type { ChatMessage } from '@/lib/storage/types';
 
 interface AssistantPanelProps {
   onClose: () => void;
@@ -42,6 +43,7 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const executionMsgIdRef = useRef<string | null>(null);
+  const saveToHistoryRef = useRef<(role: 'user' | 'assistant', content: string) => void>(() => {});
   const [clarificationSessionId, setClarificationSessionId] = useState<string | null>(null);
   const [confirmSessionId, setConfirmSessionId] = useState<string | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
@@ -62,6 +64,53 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
   const setLastModifiedTaskId = useTasksStore((s) => s.setLastModifiedTaskId);
   const lastCreatedTaskIds = useTasksStore((s) => s.lastCreatedTaskIds);
   const lastModifiedTaskId = useTasksStore((s) => s.lastModifiedTaskId);
+  const chatHistory = useTasksStore((s) => s.chatHistory);
+  const addChatMessage = useTasksStore((s) => s.addChatMessage);
+  const clearChatHistory = useTasksStore((s) => s.clearChatHistory);
+
+  // Initialize messages from stored chat history
+  useEffect(() => {
+    if (chatHistory.length > 0 && messages.length === 0) {
+      const restored: AssistantMessage[] = chatHistory.map((msg) => {
+        if (msg.role === 'user') {
+          return {
+            id: msg.id,
+            type: 'user' as const,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp),
+          };
+        } else {
+          // Restore assistant messages as completed agent-execution
+          return {
+            id: msg.id,
+            type: 'agent-execution' as const,
+            steps: [],
+            summary: msg.content,
+            status: 'completed' as const,
+            timestamp: new Date(msg.timestamp),
+            skipAnimation: true, // Skip text effect for restored messages
+          };
+        }
+      });
+      setMessages(restored);
+    }
+  }, [chatHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Helper to save message to storage
+  const saveToHistory = useCallback((role: 'user' | 'assistant', content: string) => {
+    const chatMsg: ChatMessage = {
+      id: genId(),
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    addChatMessage(chatMsg);
+  }, [addChatMessage]);
+
+  // Keep ref updated for use in callbacks
+  useEffect(() => {
+    saveToHistoryRef.current = saveToHistory;
+  }, [saveToHistory]);
 
   // Helper to update agent execution message
   const updateExecutionMessage = useCallback((
@@ -198,6 +247,11 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
           summary: message || 'Done.',
           status: 'completed',
         }));
+
+        // Save assistant response to history
+        if (message) {
+          saveToHistoryRef.current('assistant', message);
+        }
         break;
       }
 
@@ -227,6 +281,7 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
+    saveToHistory('user', content);
     setIsThinking(true);
 
     const execMsgId = genId();
@@ -321,7 +376,7 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
       setIsThinking(false);
       executionMsgIdRef.current = null;
     }
-  }, [tasks, viewMode, dateFilter, handleSSEEvent, clarificationSessionId, lastCreatedTaskIds, lastModifiedTaskId]);
+  }, [tasks, viewMode, dateFilter, handleSSEEvent, clarificationSessionId, lastCreatedTaskIds, lastModifiedTaskId, saveToHistory]);
 
   // Confirm 응답 핸들러
   const handleConfirmResponse = useCallback(async (approved: boolean) => {
@@ -440,7 +495,7 @@ export function AssistantPanel({ onClose }: AssistantPanelProps) {
   }, [handleSubmit]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full overflow-hidden bg-background">
       <AssistantHeader onClose={onClose} />
 
       <AssistantMessages

@@ -32,7 +32,7 @@ export function AssistantMessages({
   onSelectTask,
 }: AssistantMessagesProps) {
   return (
-    <ChatContainerRoot className="flex-1 relative">
+    <ChatContainerRoot className="flex-1 min-h-0 relative">
       <ChatContainerContent className="p-4 space-y-4">
         {/* 빈 상태 */}
         {messages.length === 0 && !isThinking && (

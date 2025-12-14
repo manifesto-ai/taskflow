@@ -100,7 +100,6 @@ export function AssistantMessages({
                 return null;
             }
           })}
-
         </AnimatePresence>
       </ChatContainerContent>
 

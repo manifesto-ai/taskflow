@@ -260,7 +260,7 @@ function AppLayout() {
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className="flex-shrink-0 border-l overflow-hidden"
             >
-              <div className="w-[360px] h-full">
+              <div className="w-[360px] h-full overflow-hidden">
                 <AssistantPanel onClose={() => setAssistantOpen(false)} />
               </div>
             </motion.aside>

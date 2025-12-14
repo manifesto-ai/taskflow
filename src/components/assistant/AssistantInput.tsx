@@ -42,7 +42,7 @@ export function AssistantInput({
   };
 
   return (
-    <div className="border-t bg-background px-4 py-3">
+    <div className="border-t bg-background px-3 sm:px-4 py-3 safe-area-bottom">
       <PromptInput
         value={input}
         onValueChange={setInput}
@@ -55,7 +55,7 @@ export function AssistantInput({
       >
         <PromptInputTextarea
           placeholder={placeholder}
-          className="min-h-[36px] py-2 text-sm placeholder:text-muted-foreground/70"
+          className="min-h-[40px] sm:min-h-[36px] py-2 text-base sm:text-sm placeholder:text-muted-foreground/70"
         />
         <PromptInputActions>
           <Button
@@ -63,7 +63,7 @@ export function AssistantInput({
             size="icon"
             disabled={isLoading || !input.trim()}
             onClick={handleSubmit}
-            className="h-9 w-9 shrink-0 rounded-full"
+            className="h-10 w-10 sm:h-9 sm:w-9 shrink-0 rounded-full"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

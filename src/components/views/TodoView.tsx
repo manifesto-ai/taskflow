@@ -60,7 +60,7 @@ export function TodoView() {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 sm:space-y-2">
       {sortedTasks.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           No tasks yet. Create your first task!

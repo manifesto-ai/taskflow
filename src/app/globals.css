@@ -271,3 +271,66 @@
 .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background-color: oklch(0.5 0 0 / 0.5);
 }
+
+/* ===== Mobile/Responsive Styles ===== */
+
+/* iOS Safe Area Support */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Touch-friendly interaction */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile-specific overrides */
+@media (max-width: 640px) {
+  /* Larger touch targets */
+  button:not(.no-min-height),
+  [role="button"]:not(.no-min-height) {
+    min-height: 44px;
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Snap scroll for mobile Kanban */
+.snap-x-mandatory {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-center {
+  scroll-snap-align: center;
+}
+
+.snap-start {
+  scroll-snap-align: start;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile bottom navigation height variable */
+:root {
+  --mobile-nav-height: 64px;
+}

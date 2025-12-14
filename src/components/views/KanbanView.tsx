@@ -7,6 +7,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -112,7 +113,7 @@ function KanbanColumn({
   }, [tasks.length, scrollToBottom, onScrollComplete]);
 
   return (
-    <div className="flex-1 min-w-[280px] max-w-[320px] flex flex-col h-full">
+    <div className="flex-shrink-0 w-[85vw] sm:w-auto sm:flex-1 sm:min-w-[280px] sm:max-w-[320px] flex flex-col h-full snap-center sm:snap-align-none">
       <div className={cn('rounded-t-lg p-3 shrink-0', statusColors[status])}>
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">{statusLabels[status]}</h3>
@@ -213,6 +214,12 @@ export function KanbanView() {
         distance: 8,
       },
     }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 8,
+      },
+    }),
     useSensor(KeyboardSensor)
   );
 
@@ -260,8 +267,9 @@ export function KanbanView() {
       onDragEnd={handleDragEnd}
     >
       <div className="h-full flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="flex gap-4 pb-4 h-full px-1">
+        {/* Mobile: snap scroll, Desktop: normal scroll */}
+        <div className="flex-1 overflow-x-auto overflow-y-hidden snap-x-mandatory sm:snap-none scrollbar-hide sm:scrollbar-thin">
+          <div className="flex gap-3 sm:gap-4 pb-4 h-full px-1">
             {(Object.keys(tasksByStatus) as Status[]).map((status) => (
               <KanbanColumn
                 key={status}

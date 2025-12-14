@@ -40,14 +40,16 @@ export function TaskCard({
     <Card
       className={cn(
         'cursor-pointer transition-all hover:shadow-md',
+        // Touch-friendly styles
+        'touch-manipulation active:scale-[0.98] active:shadow-sm',
         isSelected && 'ring-2 ring-primary',
         task.status === 'done' && 'opacity-75',
         className
       )}
       onClick={onSelect}
     >
-      <CardHeader className="p-3 pb-2">
-        <div className="flex items-start gap-2">
+      <CardHeader className="p-3 sm:p-3 pb-2">
+        <div className="flex items-start gap-2 sm:gap-2">
           {showCheckbox && (
             <Checkbox
               checked={task.status === 'done'}
@@ -57,7 +59,8 @@ export function TaskCard({
                 }
               }}
               onClick={(e) => e.stopPropagation()}
-              className="mt-0.5"
+              // Larger touch target on mobile
+              className="mt-0.5 h-5 w-5 sm:h-4 sm:w-4"
             />
           )}
           <CardTitle
@@ -70,13 +73,13 @@ export function TaskCard({
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="p-3 pt-0">
+      <CardContent className="p-3 sm:p-3 pt-0">
         {task.description && (
           <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
             {task.description}
           </p>
         )}
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5 sm:gap-1">
           <Badge variant="outline" className={cn('text-xs', priorityColors[task.priority])}>
             {task.priority}
           </Badge>

@@ -174,25 +174,25 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b px-3 bg-muted/50">
+      <div className="flex h-12 sm:h-12 items-center justify-between border-b px-3 sm:px-3 bg-muted/50">
         <span className="font-medium text-sm text-muted-foreground">Task Details</span>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
+            className="h-9 w-9 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
             onClick={handleDelete}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 sm:p-4 space-y-4 sm:space-y-4">
         {/* Title */}
         <div>
           <ControlledInput
@@ -204,10 +204,10 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         </div>
 
         {/* Properties */}
-        <div className="space-y-3">
+        <div className="space-y-4 sm:space-y-3">
           {/* Status */}
-          <div className="flex items-center gap-3">
-            <div className="w-24 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
               <Circle className="h-4 w-4" />
               <span>Status</span>
             </div>
@@ -215,7 +215,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               value={task.status}
               onValueChange={(value) => handleUpdate({ status: value as Task['status'] })}
             >
-              <SelectTrigger className="w-40 h-8">
+              <SelectTrigger className="w-full sm:w-40 h-10 sm:h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -232,8 +232,8 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </div>
 
           {/* Priority */}
-          <div className="flex items-center gap-3">
-            <div className="w-24 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
               <Flag className="h-4 w-4" />
               <span>Priority</span>
             </div>
@@ -241,7 +241,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               value={task.priority}
               onValueChange={(value) => handleUpdate({ priority: value as Task['priority'] })}
             >
-              <SelectTrigger className="w-40 h-8">
+              <SelectTrigger className="w-full sm:w-40 h-10 sm:h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -255,8 +255,8 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </div>
 
           {/* Assignee */}
-          <div className="flex items-center gap-3">
-            <div className="w-24 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-4 w-4" />
               <span>Assignee</span>
             </div>
@@ -264,13 +264,13 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               value={task.assignee || ''}
               onChange={(value) => handleUpdate({ assignee: value || undefined })}
               placeholder="Unassigned"
-              className="w-40 h-8"
+              className="w-full sm:w-40 h-10 sm:h-8"
             />
           </div>
 
           {/* Due Date */}
-          <div className="flex items-center gap-3">
-            <div className="w-24 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
               <span>Due date</span>
             </div>
@@ -279,7 +279,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                 <Button
                   variant="outline"
                   className={cn(
-                    'w-40 h-8 justify-start text-left font-normal',
+                    'w-full sm:w-40 h-10 sm:h-8 justify-start text-left font-normal',
                     !dueDate && 'text-muted-foreground'
                   )}
                 >
@@ -298,18 +298,18 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </div>
 
           {/* Tags */}
-          <div className="flex items-start gap-3">
-            <div className="w-24 flex items-center gap-2 text-sm text-muted-foreground pt-1">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground sm:pt-1">
               <Tag className="h-4 w-4" />
               <span>Tags</span>
             </div>
             <div className="flex-1 space-y-2">
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5 sm:gap-1">
                 {task.tags.map((tag) => (
                   <Badge
                     key={tag}
                     variant="secondary"
-                    className="text-xs cursor-pointer hover:bg-destructive/20"
+                    className="text-xs cursor-pointer hover:bg-destructive/20 py-1 px-2"
                     onClick={() => handleRemoveTag(tag)}
                   >
                     {tag} <X className="h-3 w-3 ml-1" />
@@ -327,9 +327,9 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                     }
                   }}
                   placeholder="Add a tag"
-                  className="h-8 text-xs"
+                  className="h-10 sm:h-8 text-sm sm:text-xs flex-1"
                 />
-                <Button size="sm" variant="outline" className="h-8" onClick={handleAddTag}>
+                <Button size="sm" variant="outline" className="h-10 sm:h-8 px-4" onClick={handleAddTag}>
                   Add
                 </Button>
               </div>
@@ -346,7 +346,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             value={task.description || ''}
             onChange={(value) => handleUpdate({ description: value || undefined })}
             placeholder="Add a description..."
-            className="min-h-[120px] resize-none"
+            className="min-h-[120px] resize-none text-base sm:text-sm"
           />
         </div>
 

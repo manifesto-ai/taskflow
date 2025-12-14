@@ -57,28 +57,53 @@ This project is scoped as a **minimal, understandable demonstration** of the cor
                          │ POST /api/agent/simple/stream
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                         SERVER                               │
+│                    SERVER (2-LLM Architecture)               │
 │                                                              │
-│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
-│   │  GPT-5-mini │ → │   Intent    │ → │   Runtime   │       │
-│   │  (1-shot)   │   │  Validator  │   │  Executor   │       │
-│   └─────────────┘   └─────────────┘   └─────────────┘       │
-│                                              │               │
-│                                              ▼               │
-│                                       ┌─────────────┐       │
-│                                       │   Effects   │       │
-│                                       │ (PatchOps)  │       │
-│                                       └─────────────┘       │
+│   ┌───────────────────────────────────────────────────┐     │
+│   │  1st LLM: Intent Parser                           │     │
+│   │  - Converts natural language → structured Intent  │     │
+│   │  - Focused on understanding user intent           │     │
+│   └───────────────────────┬───────────────────────────┘     │
+│                           ▼                                  │
+│   ┌─────────────┐   ┌─────────────┐                         │
+│   │   Intent    │ → │   Runtime   │ → Effects               │
+│   │  Validator  │   │  Executor   │   (PatchOps)            │
+│   └─────────────┘   └─────────────┘                         │
+│                           │                                  │
+│                           ▼                                  │
+│   ┌───────────────────────────────────────────────────┐     │
+│   │  2nd LLM: Response Generator                      │     │
+│   │  - Generates natural language response            │     │
+│   │  - Uses execution result + context for accuracy   │     │
+│   └───────────────────────────────────────────────────┘     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### 2-LLM Architecture
+
+This project uses a **2-LLM architecture** that separates intent parsing from response generation:
+
+| Stage | LLM Role | Input | Output |
+|-------|----------|-------|--------|
+| 1st | **Intent Parser** | User instruction + Task context | Structured Intent JSON |
+| 2nd | **Response Generator** | Intent + Execution result + State | Natural language message |
+
+**Why 2 LLMs?**
+
+1. **Separation of Concerns**: Each LLM focuses on a single task, improving accuracy
+2. **Better Responses**: Response Generator has access to actual execution results
+3. **Simpler Prompts**: Each prompt is shorter and more focused
+4. **Improved QueryTasks**: 2nd LLM can answer questions with full context of what happened
 
 ### Data Flow
 
 1. **User Input** → Natural language instruction
-2. **LLM** → Generates structured Intent JSON (validated schema)
-3. **Runtime** → Executes intent deterministically, produces Effects
-4. **Effects** → Applied to Zustand store via patch operations
-5. **Storage** → Persists to IndexedDB (with localStorage fallback)
+2. **1st LLM (Intent Parser)** → Generates structured Intent JSON (no message)
+3. **Validation** → Intent schema validation
+4. **Runtime** → Executes intent deterministically, produces Effects
+5. **2nd LLM (Response Generator)** → Creates user-friendly response based on results
+6. **Effects** → Applied to Zustand store via patch operations
+7. **Storage** → Persists to IndexedDB (with localStorage fallback)
 
 ---
 

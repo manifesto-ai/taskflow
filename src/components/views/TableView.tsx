@@ -88,17 +88,17 @@ export function TableView() {
   }
 
   return (
-    <div className="rounded-md border">
-      <Table>
+    <div className="rounded-md border overflow-x-auto">
+      <Table className="min-w-[500px]">
         <TableHeader>
           <TableRow>
             <TableHead className="w-[40px]"></TableHead>
             <TableHead>Title</TableHead>
-            <TableHead className="w-[120px]">Status</TableHead>
-            <TableHead className="w-[100px]">Priority</TableHead>
-            <TableHead className="w-[110px]">Due Date</TableHead>
-            <TableHead className="w-[100px]">Assignee</TableHead>
-            <TableHead className="w-[150px]">Tags</TableHead>
+            <TableHead className="w-[100px]">Status</TableHead>
+            <TableHead className="w-[80px] hidden sm:table-cell">Priority</TableHead>
+            <TableHead className="w-[100px] hidden md:table-cell">Due Date</TableHead>
+            <TableHead className="w-[100px] hidden lg:table-cell">Assignee</TableHead>
+            <TableHead className="w-[120px] hidden lg:table-cell">Tags</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -106,19 +106,20 @@ export function TableView() {
             <TableRow
               key={task.id}
               className={cn(
-                'cursor-pointer',
+                'cursor-pointer touch-manipulation',
                 selectedTaskId === task.id && 'bg-muted'
               )}
               onClick={() => setSelectedTaskId(task.id)}
             >
-              <TableCell>
+              <TableCell className="py-3">
                 <Checkbox
                   checked={task.status === 'done'}
                   onCheckedChange={() => handleToggleComplete(task.id, task.status)}
                   onClick={(e) => e.stopPropagation()}
+                  className="h-5 w-5"
                 />
               </TableCell>
-              <TableCell>
+              <TableCell className="py-3">
                 <div>
                   <div
                     className={cn(
@@ -133,25 +134,36 @@ export function TableView() {
                       {task.description}
                     </div>
                   )}
+                  {/* Show priority inline on mobile */}
+                  <div className="flex items-center gap-2 mt-1 sm:hidden">
+                    <Badge variant="outline" className={cn('text-xs', priorityColors[task.priority])}>
+                      {task.priority}
+                    </Badge>
+                    {task.dueDate && (
+                      <span className="text-xs text-muted-foreground">
+                        {format(parseISO(task.dueDate), 'MMM d')}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </TableCell>
-              <TableCell>
+              <TableCell className="py-3">
                 <Badge variant="outline" className={cn('text-xs', statusColors[task.status])}>
                   {statusLabels[task.status]}
                 </Badge>
               </TableCell>
-              <TableCell>
+              <TableCell className="py-3 hidden sm:table-cell">
                 <Badge variant="outline" className={cn('text-xs', priorityColors[task.priority])}>
                   {task.priority}
                 </Badge>
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
+              <TableCell className="py-3 text-sm text-muted-foreground hidden md:table-cell">
                 {task.dueDate ? format(parseISO(task.dueDate), 'MMM d, yyyy') : '-'}
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
+              <TableCell className="py-3 text-sm text-muted-foreground hidden lg:table-cell">
                 {task.assignee || '-'}
               </TableCell>
-              <TableCell>
+              <TableCell className="py-3 hidden lg:table-cell">
                 <div className="flex flex-wrap gap-1">
                   {task.tags.slice(0, 2).map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">

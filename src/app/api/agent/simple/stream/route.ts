@@ -10,9 +10,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { Intent } from '@/lib/agents/intent';
 import { validateIntent } from '@/lib/agents/intent';
-import { executeIntent, type Snapshot, type ExecutionResult } from '@/lib/agents/runtime';
-import type { AgentEffect } from '@/lib/agents/types';
+import { executeIntent, type Snapshot } from '@/lib/agents/runtime';
 import { ratelimit, getClientId, isRateLimitConfigured } from '@/lib/rate-limit';
+import {
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  VIEW_MODES,
+  DATE_FILTER_TYPES,
+  SCHEMA_DSL,
+} from '@/lib/agents/prompts/schema';
 
 // ============================================
 // Request Type
@@ -24,6 +30,99 @@ interface SimpleIntentRequest {
 }
 
 // ============================================
+// Intent Schema Definition (for LLM)
+// ============================================
+
+const INTENT_SCHEMA = {
+  CreateTask: {
+    kind: 'CreateTask',
+    tasks: [{
+      title: 'string (required)',
+      priority: `one of: ${TASK_PRIORITIES.join(', ')}`,
+      dueDate: 'YYYY-MM-DD (optional)',
+      tags: ['string'],
+    }],
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  ChangeStatus: {
+    kind: 'ChangeStatus',
+    taskId: 'string (from task list)',
+    toStatus: `one of: ${TASK_STATUSES.join(', ')}`,
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  UpdateTask: {
+    kind: 'UpdateTask',
+    taskId: 'string (from task list)',
+    changes: {
+      title: 'string (optional)',
+      priority: `one of: ${TASK_PRIORITIES.join(', ')}`,
+      dueDate: 'YYYY-MM-DD or null (optional)',
+      assignee: 'string or null (optional)',
+      description: 'string (optional)',
+      tags: ['string'],
+    },
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  DeleteTask: {
+    kind: 'DeleteTask',
+    taskId: 'string (single delete)',
+    taskIds: ['string (bulk delete - use ALL task IDs)'],
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  RestoreTask: {
+    kind: 'RestoreTask',
+    taskId: 'string (from deleted tasks)',
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  SelectTask: {
+    kind: 'SelectTask',
+    taskId: 'string or null (to deselect)',
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  QueryTasks: {
+    kind: 'QueryTasks',
+    query: 'string (the question)',
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  ChangeView: {
+    kind: 'ChangeView',
+    viewMode: `one of: ${VIEW_MODES.join(', ')}`,
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  SetDateFilter: {
+    kind: 'SetDateFilter',
+    filter: {
+      field: 'one of: dueDate, createdAt',
+      type: `one of: ${DATE_FILTER_TYPES.join(', ')}`,
+    },
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  Undo: {
+    kind: 'Undo',
+    confidence: 'number (0-1)',
+    source: 'human',
+  },
+  RequestClarification: {
+    kind: 'RequestClarification',
+    reason: 'one of: which_task, missing_title, ambiguous_action, multiple_matches',
+    question: 'string (question to ask user)',
+    originalInput: 'string (user original input)',
+    candidates: ['taskId (optional, for which_task)'],
+    confidence: 'number (0-1)',
+    source: 'agent',
+  },
+};
+
+// ============================================
 // 1st LLM: Intent Parser Prompt
 // ============================================
 
@@ -33,49 +132,41 @@ function getIntentParserPrompt(): string {
   const todayStr = now.toISOString().split('T')[0];
   const dayOfWeek = days[now.getDay()];
 
-  // Calculate tomorrow
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   return `You are an Intent Parser. Convert natural language into structured Intent JSON.
 
-## Today: ${todayStr} (${dayOfWeek})
-## Tomorrow: ${tomorrowStr}
+## Date Context
+Today: ${todayStr} (${dayOfWeek})
+Tomorrow: ${tomorrowStr}
 
-## Output Format (JSON only, NO message field)
-{
-  "kind": "...",
-  "confidence": 0.9,
-  "source": "human",
-  ...kind-specific fields
-}
+${SCHEMA_DSL}
 
-## Intent Types
-| kind | When to use | Key fields |
-|------|-------------|------------|
-| CreateTask | Add new task(s) | tasks: [{ title, priority?, dueDate?, tags? }] |
-| ChangeStatus | Complete/start/change task state | taskId, toStatus: "todo"|"in-progress"|"review"|"done" |
-| UpdateTask | Modify task properties | taskId, changes: { title?, priority?, dueDate?, assignee?, description?, tags? } |
-| DeleteTask | Remove a task | taskId |
-| RestoreTask | Restore deleted task | taskId |
-| SelectTask | View/open a task | taskId (null to deselect) |
-| QueryTasks | Question about tasks or greeting/chat | query |
-| ChangeView | Switch view mode | viewMode: "kanban"|"table"|"todo" |
-| SetDateFilter | Filter by date | filter: { field: "dueDate"|"createdAt", type: "today"|"week"|"month" } or null |
-| Undo | Undo last action | (no extra fields) |
-| RequestClarification | Truly ambiguous | reason, question, originalInput |
+## Intent Schema (use exactly these field names and values)
+${JSON.stringify(INTENT_SCHEMA, null, 2)}
 
 ## Rules
-1. **Match tasks by meaning** - Find tasks by keywords from task list. Use exact taskId.
-2. **"this/it" = selected task** - Refer to Currently Selected Task in context.
-3. **Calculate dates** - "tomorrow" → ${tomorrowStr}, "next Tuesday" → compute YYYY-MM-DD.
-4. **Questions & Chat → QueryTasks** - Greetings, questions, casual chat all use QueryTasks.
-5. **User's words = task title** - Use exactly what the user says as the title. "사과사기 추가" → title: "사과사기". "buy milk" → title: "buy milk". Don't overthink.
-6. **Assign = UpdateTask** - "assign to X" → UpdateTask with changes.assignee.
-7. **RequestClarification is RARE** - Only use when 2+ existing tasks match the same keyword (which_task) or user literally says "add a task" with no content at all.
+1. Match tasks by keywords from task list. Use exact taskId from the list.
+2. "this", "it", "that" = Currently Selected Task.
+3. Extract dates: "tomorrow" = ${tomorrowStr}, "next Monday" = compute YYYY-MM-DD. ALWAYS set dueDate when a date is mentioned.
+4. Greetings, questions, casual chat = QueryTasks.
+5. Use user's exact words as task title. Do not paraphrase.
+6. Priority: "urgent/critical/important" = "high", "normal/regular" = "medium", "later/someday" = "low".
+7. "delete all" = DeleteTask with taskIds array containing ALL task IDs.
+8. RequestClarification ONLY when 2+ tasks match the same keyword. Never for new tasks.
 
-⚠️ DO NOT include "message" or "answer" fields. Only structured intent data.`;
+## Output Format
+Return a FLAT JSON object with "kind" at the root level.
+
+Example for CreateTask:
+{"kind":"CreateTask","tasks":[{"title":"buy milk"}],"confidence":0.9,"source":"human"}
+
+Example for ChangeStatus:
+{"kind":"ChangeStatus","taskId":"task-1","toStatus":"done","confidence":0.9,"source":"human"}
+
+DO NOT wrap in another object. Output must start with {"kind":"...`;
 }
 
 // ============================================
@@ -83,16 +174,16 @@ function getIntentParserPrompt(): string {
 // ============================================
 
 function getResponseGeneratorPrompt(): string {
-  return `You are a friendly Task Assistant. Generate natural, conversational responses.
+  return `You are a friendly Task Assistant. Generate natural responses.
 
 ## Rules
-1. **Respond in the SAME LANGUAGE as the user's input** (detect from User's Original Request)
-2. Be concise (1-2 sentences max)
-3. For task operations: briefly confirm what was done
-4. For QueryTasks: answer the user's question based on the task data provided
-5. For off-topic questions (weather, news, etc.): politely say you can only help with tasks
-6. For greetings: respond warmly and offer to help with tasks
-7. Be friendly and human-like
+1. Respond in the SAME LANGUAGE as the user's original request
+2. Be concise (1-2 sentences)
+3. For success: confirm what was done
+4. For errors: apologize briefly and suggest what user can try
+5. For queries: answer based on task data
+6. For greetings: respond warmly
+7. Be friendly and helpful
 
 ## Output Format (JSON)
 { "message": "your response" }`;
@@ -100,18 +191,18 @@ function getResponseGeneratorPrompt(): string {
 
 interface ResponseGeneratorInput {
   instruction: string;
-  intent: Intent;
-  executionResult: ExecutionResult;
+  intent: Intent | null;
+  executionResult: { success: boolean; error?: string; effects: unknown[] };
   snapshot: Snapshot;
+  errorContext?: string;
 }
 
 async function generateResponse(
   openai: OpenAI,
   input: ResponseGeneratorInput
 ): Promise<string> {
-  const { instruction, intent, executionResult, snapshot } = input;
+  const { instruction, intent, executionResult, snapshot, errorContext } = input;
 
-  // Build context for response generation
   const activeTasks = snapshot.data.tasks.filter(t => !t.deletedAt);
   const tasksSummary = {
     total: activeTasks.length,
@@ -123,31 +214,43 @@ async function generateResponse(
     },
   };
 
-  // For QueryTasks, include task list for answering questions
   let taskContext = '';
-  if (intent.kind === 'QueryTasks') {
-    taskContext = `\n\n## Task List (for answering questions)
+  if (intent?.kind === 'QueryTasks') {
+    taskContext = `\n\n## Task List
 ${activeTasks.map(t => `- "${t.title}" (${t.status}, ${t.priority}${t.dueDate ? `, due: ${t.dueDate}` : ''})`).join('\n')}`;
   }
 
-  const userMessage = `## User's Original Request
+  let actionInfo = '';
+  if (intent) {
+    actionInfo = `## Action
+- Intent: ${intent.kind}
+- Result: ${executionResult.success ? 'SUCCESS' : `FAILED - ${executionResult.error}`}`;
+
+    if (intent.kind === 'CreateTask') {
+      actionInfo += `\n- Created: ${(intent as { tasks: { title: string }[] }).tasks.map(t => t.title).join(', ')}`;
+    } else if (intent.kind === 'ChangeStatus') {
+      actionInfo += `\n- Status: ${(intent as { toStatus: string }).toStatus}`;
+    } else if (intent.kind === 'DeleteTask') {
+      const delIntent = intent as { taskId?: string; taskIds?: string[] };
+      const count = delIntent.taskIds?.length ?? (delIntent.taskId ? 1 : 0);
+      actionInfo += `\n- Deleted: ${count} task(s)`;
+    }
+  } else if (errorContext) {
+    actionInfo = `## Error
+- Type: Processing error
+- Context: ${errorContext}`;
+  }
+
+  const userMessage = `## User Request
 "${instruction}"
 
-## Action Taken
-- Intent: ${intent.kind}
-- Execution: ${executionResult.success ? 'SUCCESS' : `FAILED - ${executionResult.error}`}
-${intent.kind === 'CreateTask' ? `- Created tasks: ${(intent as { tasks: { title: string }[] }).tasks.map(t => t.title).join(', ')}` : ''}
-${intent.kind === 'ChangeStatus' ? `- Changed status to: ${(intent as { toStatus: string }).toStatus}` : ''}
-${intent.kind === 'ChangeView' ? `- Changed view to: ${(intent as { viewMode: string }).viewMode}` : ''}
-${intent.kind === 'QueryTasks' ? `- Query: ${(intent as { query: string }).query}` : ''}
-${intent.kind === 'RequestClarification' ? `- Reason: ${(intent as { reason: string }).reason}\n- Question hint: ${(intent as { question: string }).question}` : ''}
+${actionInfo}
 
 ## Current State
-- Total tasks: ${tasksSummary.total}
-- By status: todo=${tasksSummary.byStatus.todo}, in-progress=${tasksSummary.byStatus['in-progress']}, review=${tasksSummary.byStatus.review}, done=${tasksSummary.byStatus.done}
-- View mode: ${snapshot.state.viewMode}${taskContext}
+- Tasks: ${tasksSummary.total} (todo: ${tasksSummary.byStatus.todo}, in-progress: ${tasksSummary.byStatus['in-progress']}, done: ${tasksSummary.byStatus.done})
+- View: ${snapshot.state.viewMode}${taskContext}
 
-Generate a natural response message.`;
+Generate a natural response.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -172,8 +275,7 @@ Generate a natural response message.`;
     console.error('Response generation failed:', e);
   }
 
-  // Fallback to simple message
-  return getDefaultMessage(intent);
+  return intent ? getDefaultMessage(intent) : 'Something went wrong. Please try again.';
 }
 
 function getDefaultMessage(intent: Intent): string {
@@ -230,12 +332,23 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let openai: OpenAI | null = null;
+      let instruction = '';
+      let snapshot: Snapshot | null = null;
+
       try {
         const body: SimpleIntentRequest = await request.json();
-        const { instruction, snapshot } = body;
+        instruction = body.instruction;
+        snapshot = body.snapshot;
 
         if (!instruction) {
           sendSSE(controller, 'error', { error: 'Instruction is required' });
+          controller.close();
+          return;
+        }
+
+        if (!snapshot) {
+          sendSSE(controller, 'error', { error: 'Snapshot is required' });
           controller.close();
           return;
         }
@@ -246,12 +359,12 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
         // 1. Start event
         sendSSE(controller, 'start', {});
 
-        // 2. Build user message for Intent Parser (1st LLM)
+        // 2. Build user message for Intent Parser
         const activeTasks = snapshot.data.tasks.filter(t => !t.deletedAt);
         const taskListForLLM = activeTasks.map(t => ({
           id: t.id,
@@ -261,8 +374,9 @@ export async function POST(request: NextRequest) {
           dueDate: t.dueDate,
         }));
 
-        const selectedTask = snapshot.state.selectedTaskId
-          ? activeTasks.find(t => t.id === snapshot.state.selectedTaskId)
+        const selectedTaskId = snapshot.state.selectedTaskId;
+        const selectedTask = selectedTaskId
+          ? activeTasks.find(t => t.id === selectedTaskId)
           : null;
 
         const intentParserMessage = `## Current Tasks
@@ -271,18 +385,18 @@ ${JSON.stringify(taskListForLLM, null, 2)}
 ## Currently Selected Task
 ${selectedTask
   ? `ID: ${selectedTask.id}\nTitle: "${selectedTask.title}"\nStatus: ${selectedTask.status}\nPriority: ${selectedTask.priority}`
-  : 'None (no task is currently selected)'}
+  : 'None'}
 
-## Current View State
-- View Mode: ${snapshot.state.viewMode}
-- Date Filter: ${snapshot.state.dateFilter ? JSON.stringify(snapshot.state.dateFilter) : 'none'}
+## View State
+- Mode: ${snapshot.state.viewMode}
+- Filter: ${snapshot.state.dateFilter ? JSON.stringify(snapshot.state.dateFilter) : 'none'}
 
 ## User Instruction
 ${instruction}
 
-Output only a valid JSON Intent object (no message field).`;
+Output valid JSON Intent.`;
 
-        // 3. 1st LLM Call: Intent Parsing
+        // 3. 1st LLM: Intent Parsing
         const intentCompletion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
@@ -296,7 +410,14 @@ Output only a valid JSON Intent object (no message field).`;
 
         const intentContent = intentCompletion.choices[0]?.message?.content;
         if (!intentContent) {
-          sendSSE(controller, 'error', { error: 'No response from Intent Parser' });
+          const message = await generateResponse(openai, {
+            instruction,
+            intent: null,
+            executionResult: { success: false, error: 'No response from parser', effects: [] },
+            snapshot,
+            errorContext: 'Intent parser returned empty response',
+          });
+          sendSSE(controller, 'done', { effects: [], message });
           controller.close();
           return;
         }
@@ -306,7 +427,14 @@ Output only a valid JSON Intent object (no message field).`;
         try {
           intent = JSON.parse(intentContent);
         } catch {
-          sendSSE(controller, 'error', { error: `Invalid JSON from Intent Parser: ${intentContent}` });
+          const message = await generateResponse(openai, {
+            instruction,
+            intent: null,
+            executionResult: { success: false, error: 'Invalid JSON', effects: [] },
+            snapshot,
+            errorContext: 'Could not parse intent as JSON',
+          });
+          sendSSE(controller, 'done', { effects: [], message });
           controller.close();
           return;
         }
@@ -314,7 +442,14 @@ Output only a valid JSON Intent object (no message field).`;
         // 5. Validate Intent
         const validation = validateIntent(intent);
         if (!validation.valid) {
-          sendSSE(controller, 'error', { error: `Intent validation failed: ${validation.errors.join(', ')}` });
+          const message = await generateResponse(openai, {
+            instruction,
+            intent: null,
+            executionResult: { success: false, error: validation.errors.join(', '), effects: [] },
+            snapshot,
+            errorContext: `Validation failed: ${validation.errors.join(', ')}`,
+          });
+          sendSSE(controller, 'done', { effects: [], message });
           controller.close();
           return;
         }
@@ -325,7 +460,7 @@ Output only a valid JSON Intent object (no message field).`;
         // 7. Execute Intent
         const executionResult = executeIntent(intent, snapshot);
 
-        // 8. 2nd LLM Call: Generate Response
+        // 8. 2nd LLM: Generate Response
         const message = await generateResponse(openai, {
           instruction,
           intent,
@@ -333,27 +468,35 @@ Output only a valid JSON Intent object (no message field).`;
           snapshot,
         });
 
-        // 9. Handle execution failure
-        if (!executionResult.success) {
-          sendSSE(controller, 'done', {
-            effects: [],
-            message: `Error occurred: ${executionResult.error}`,
-          });
-          controller.close();
-          return;
-        }
-
-        // 10. Send done event with effects and generated message
+        // 9. Send done event
         sendSSE(controller, 'done', {
-          effects: executionResult.effects,
+          effects: executionResult.success ? executionResult.effects : [],
           message,
         });
 
         controller.close();
       } catch (error) {
-        sendSSE(controller, 'error', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        // Try to generate friendly error message if possible
+        if (openai && snapshot) {
+          try {
+            const message = await generateResponse(openai, {
+              instruction,
+              intent: null,
+              executionResult: { success: false, error: 'Unexpected error', effects: [] },
+              snapshot,
+              errorContext: error instanceof Error ? error.message : 'Unknown error',
+            });
+            sendSSE(controller, 'done', { effects: [], message });
+          } catch {
+            sendSSE(controller, 'error', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        } else {
+          sendSSE(controller, 'error', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
         controller.close();
       }
     },

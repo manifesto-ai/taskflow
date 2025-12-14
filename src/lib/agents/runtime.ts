@@ -305,11 +305,14 @@ function generateChangeStatusEffects(intent: ChangeStatusIntent, snapshot: Snaps
 }
 
 function generateDeleteTaskEffects(intent: DeleteTaskIntent): PatchOp[] {
-  return [{
-    op: 'remove',
+  // Support both single taskId and multiple taskIds
+  const ids = intent.taskIds ?? (intent.taskId ? [intent.taskId] : []);
+
+  return ids.map(id => ({
+    op: 'remove' as const,
     path: 'data.tasks',
-    value: intent.taskId,
-  }];
+    value: id,
+  }));
 }
 
 function generateRestoreTaskEffects(intent: RestoreTaskIntent): PatchOp[] {

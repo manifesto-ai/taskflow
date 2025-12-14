@@ -101,10 +101,14 @@ export interface ChangeStatusIntent extends BaseIntent {
 
 /**
  * DeleteTask - 태스크 삭제 (soft delete)
+ * taskId: 단일 삭제
+ * taskIds: 복수 삭제 (bulk delete)
+ * 둘 중 하나만 사용
  */
 export interface DeleteTaskIntent extends BaseIntent {
   kind: 'DeleteTask';
-  taskId: string;
+  taskId?: string;
+  taskIds?: string[];
 }
 
 /**
@@ -311,7 +315,18 @@ function validateIntentByKind(intent: Intent): string[] {
       }
       break;
 
-    case 'DeleteTask':
+    case 'DeleteTask': {
+      const hasTaskId = intent.taskId && typeof intent.taskId === 'string';
+      const hasTaskIds = intent.taskIds && Array.isArray(intent.taskIds) && intent.taskIds.length > 0;
+      if (!hasTaskId && !hasTaskIds) {
+        errors.push('DeleteTask: either taskId or taskIds is required');
+      }
+      if (hasTaskIds && !intent.taskIds!.every(id => typeof id === 'string')) {
+        errors.push('DeleteTask: all taskIds must be strings');
+      }
+      break;
+    }
+
     case 'RestoreTask':
       if (!intent.taskId || typeof intent.taskId !== 'string') {
         errors.push(`${intent.kind}: taskId is required`);
@@ -421,6 +436,15 @@ export const IntentBuilder = {
     return {
       kind: 'DeleteTask',
       taskId,
+      confidence: 1.0,
+      source,
+    };
+  },
+
+  deleteTasks(taskIds: string[], source: BaseIntent['source'] = 'ui'): DeleteTaskIntent {
+    return {
+      kind: 'DeleteTask',
+      taskIds,
       confidence: 1.0,
       source,
     };

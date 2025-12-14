@@ -38,16 +38,16 @@ This project is scoped as a **minimal, understandable demonstration** of the cor
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         CLIENT                               │
-│                                                              │
-│   User Input ("Add a task for tomorrow")                     │
-│         │                                                    │
-│         ▼                                                    │
+│                         CLIENT                              │
+│                                                             │
+│   User Input ("Add a task for tomorrow")                    │
+│         │                                                   │
+│         ▼                                                   │
 │   ┌─────────────┐    SSE     ┌─────────────┐                │
 │   │ Assistant   │ ─────────▶ │   Zustand   │                │
 │   │   Panel     │   Events   │    Store    │                │
 │   └─────────────┘            └──────┬──────┘                │
-│                                     │                        │
+│                                     │                       │
 │                              ┌──────▼──────┐                │
 │                              │   Storage   │                │
 │                              │ (IndexedDB) │                │
@@ -57,20 +57,20 @@ This project is scoped as a **minimal, understandable demonstration** of the cor
                          │ POST /api/agent/simple/stream
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    SERVER (2-LLM Architecture)               │
-│                                                              │
+│                    SERVER (2-LLM Architecture)              │
+│                                                             │
 │   ┌───────────────────────────────────────────────────┐     │
 │   │  1st LLM: Intent Parser                           │     │
 │   │  - Converts natural language → structured Intent  │     │
 │   │  - Focused on understanding user intent           │     │
 │   └───────────────────────┬───────────────────────────┘     │
-│                           ▼                                  │
+│                           ▼                                 │
 │   ┌─────────────┐   ┌─────────────┐                         │
 │   │   Intent    │ → │   Runtime   │ → Effects               │
 │   │  Validator  │   │  Executor   │   (PatchOps)            │
 │   └─────────────┘   └─────────────┘                         │
-│                           │                                  │
-│                           ▼                                  │
+│                           │                                 │
+│                           ▼                                 │
 │   ┌───────────────────────────────────────────────────┐     │
 │   │  2nd LLM: Response Generator                      │     │
 │   │  - Generates natural language response            │     │

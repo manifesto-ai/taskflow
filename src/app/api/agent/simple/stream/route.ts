@@ -71,19 +71,9 @@ function getIntentParserPrompt(): string {
 2. **"this/it" = selected task** - Refer to Currently Selected Task in context.
 3. **Calculate dates** - "tomorrow" → ${tomorrowStr}, "next Tuesday" → compute YYYY-MM-DD.
 4. **Questions & Chat → QueryTasks** - Greetings, questions, casual chat all use QueryTasks.
-5. **Missing title → RequestClarification** - "Add a task" without specifying WHAT → RequestClarification with reason="missing_title".
+5. **User's words = task title** - Use exactly what the user says as the title. "사과사기 추가" → title: "사과사기". "buy milk" → title: "buy milk". Don't overthink.
 6. **Assign = UpdateTask** - "assign to X" → UpdateTask with changes.assignee.
-
-## RequestClarification Format
-When information is missing or ambiguous:
-{
-  "kind": "RequestClarification",
-  "reason": "missing_title" | "which_task" | "ambiguous_action" | "multiple_matches",
-  "question": "What task would you like to add?",
-  "originalInput": "user's original input",
-  "confidence": 0.5,
-  "source": "agent"
-}
+7. **RequestClarification is RARE** - Only use when 2+ existing tasks match the same keyword (which_task) or user literally says "add a task" with no content at all.
 
 ⚠️ DO NOT include "message" or "answer" fields. Only structured intent data.`;
 }

@@ -11,7 +11,7 @@ In this architecture, **the LLM does not mutate UI state directly**. Instead, it
 ## What This Project IS
 
 - A **working demo** of an Intent → Effect → Snapshot execution model
-- A **reference implementation** of a Simple Intent API using GPT-5-mini
+- A **reference implementation** of a Simple Intent API using GPT-4o-mini
 - A practical example of integrating:
   - LLM (intent generation via natural language)
   - Deterministic runtime (effect execution)
@@ -119,7 +119,7 @@ This project uses a **2-LLM architecture** that separates intent parsing from re
 ### What this demo app provides:
 
 - UI layer (React + Tailwind + shadcn/ui)
-- LLM integration (OpenAI GPT-5-mini)
+- LLM integration (OpenAI GPT-4o-mini)
 - SSE streaming for real-time feedback
 - Storage layer (IndexedDB / localStorage)
 - Intent validation and execution pipeline
@@ -250,7 +250,7 @@ src/
 - **Framework**: Next.js 15 (App Router)
 - **UI**: React 19, Tailwind CSS, shadcn/ui
 - **State**: Zustand + @manifesto-ai/bridge-zustand
-- **LLM**: OpenAI GPT-5-mini
+- **LLM**: OpenAI GPT-4o-mini
 - **Storage**: IndexedDB (primary), localStorage (fallback)
 - **Streaming**: Server-Sent Events (SSE)
 

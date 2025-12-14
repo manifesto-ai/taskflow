@@ -24,7 +24,7 @@ In this architecture, **the LLM does not mutate UI state directly**. Instead, it
 
 ## What This Project is NOT
 
-- **Not** the full Manifesto research architecture (e.g., ICAA, policy learning)
+- **Not** the full Manifesto research architecture
 - **Not** a multi-agent orchestration framework
 - **Not** an attempt to replace React, Zustand, or existing UI frameworks
 - **Not** a production-ready task management solution

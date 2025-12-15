@@ -18,7 +18,7 @@ In this architecture, **the LLM does not mutate UI state directly**. Instead, it
   - React + Zustand UI (state projection)
   - SSE streaming (real-time feedback)
 - A **runnable example** to understand Manifesto as a runtime, not just a concept
-- A task management app with natural language interaction (create, update, delete, query tasks)
+- A task management app with natural language interaction (create, update, delete)
 
 ---
 
@@ -93,7 +93,6 @@ This project uses a **2-LLM architecture** that separates intent parsing from re
 1. **Separation of Concerns**: Each LLM focuses on a single task, improving accuracy
 2. **Better Responses**: Response Generator has access to actual execution results
 3. **Simpler Prompts**: Each prompt is shorter and more focused
-4. **Improved QueryTasks**: 2nd LLM can answer questions with full context of what happened
 
 ### Data Flow
 
@@ -182,7 +181,6 @@ The complete application state at a point in time, modified only through Effects
 | `ChangeStatus` | Change task status (todo → in-progress → done) |
 | `DeleteTask` | Soft-delete a task |
 | `SelectTask` | Select/deselect a task for viewing |
-| `QueryTasks` | Ask questions about tasks |
 | `ChangeView` | Switch view mode (kanban/table/todo) |
 | `SetDateFilter` | Apply date-based filtering |
 | `Undo` | Revert the last action |

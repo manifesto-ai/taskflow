@@ -10,11 +10,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useTasksStore } from '@/store/useTasksStore';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/domain/tasks';
-import { getDateRangeFromType } from '@/components/ui/date-range-picker';
-import { isWithinInterval, parseISO, format } from 'date-fns';
+import type { Task } from '@/types/taskflow';
+import { format, parseISO } from 'date-fns';
 
 // Notion-style subtle colors
 const priorityColors = {
@@ -37,52 +35,21 @@ const statusLabels = {
   done: 'Done',
 };
 
-// Helper function to filter tasks by date
-function filterTasksByDate(tasks: Task[], dateFilter: ReturnType<typeof useTasksStore.getState>['dateFilter']): Task[] {
-  if (!dateFilter) return tasks;
-
-  let startDate: Date;
-  let endDate: Date;
-
-  if (dateFilter.type === 'custom' && dateFilter.startDate && dateFilter.endDate) {
-    startDate = new Date(dateFilter.startDate);
-    endDate = new Date(dateFilter.endDate);
-  } else {
-    const range = getDateRangeFromType(dateFilter.type);
-    if (!range) return tasks;
-    startDate = range.startDate;
-    endDate = range.endDate;
-  }
-
-  return tasks.filter((task) => {
-    const dateValue = dateFilter.field === 'dueDate' ? task.dueDate : task.createdAt;
-    if (!dateValue) return false;
-
-    const taskDate = typeof dateValue === 'string' ? parseISO(dateValue) : dateValue;
-    return isWithinInterval(taskDate, { start: startDate, end: endDate });
-  });
+interface TableViewProps {
+  tasks: Task[];
+  selectedTaskId: string | null;
+  onSelectTask: (taskId: string) => void;
 }
 
-export function TableView() {
-  const allTasks = useTasksStore((state) => state.tasks);
-  const selectedTaskId = useTasksStore((state) => state.selectedTaskId);
-  const setSelectedTaskId = useTasksStore((state) => state.setSelectedTaskId);
-  const updateTask = useTasksStore((state) => state.updateTask);
-  const dateFilter = useTasksStore((state) => state.dateFilter);
-
-  // Filter out deleted tasks, then apply date filter
-  const activeTasks = allTasks.filter((t) => !t.deletedAt);
-  const tasks = filterTasksByDate(activeTasks, dateFilter);
-
-  const handleToggleComplete = (taskId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'done' ? 'todo' : 'done';
-    updateTask(taskId, { status: newStatus, updatedAt: new Date().toISOString() });
-  };
-
+export function TableView({
+  tasks,
+  selectedTaskId,
+  onSelectTask,
+}: TableViewProps) {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        No tasks yet. Create your first task!
+        No visible tasks in this shell view.
       </div>
     );
   }
@@ -109,12 +76,12 @@ export function TableView() {
                 'cursor-pointer touch-manipulation',
                 selectedTaskId === task.id && 'bg-muted'
               )}
-              onClick={() => setSelectedTaskId(task.id)}
+              onClick={() => onSelectTask(task.id)}
             >
               <TableCell className="py-3">
                 <Checkbox
                   checked={task.status === 'done'}
-                  onCheckedChange={() => handleToggleComplete(task.id, task.status)}
+                  disabled
                   onClick={(e) => e.stopPropagation()}
                   className="h-5 w-5"
                 />

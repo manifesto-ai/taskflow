@@ -1,425 +1,199 @@
-/**
- * Agent API Route
- *
- * Handles LLM requests for the agent session.
- * Supports natural conversation AND task management actions.
- */
-
-import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import {
-  generateEffectId,
-  type AgentDecision,
-} from '@manifesto-ai/agent';
-import { getDateContext } from '@/lib/agents/utils/date';
+import { NextResponse } from 'next/server';
+import { TASKFLOW_MEL } from '@/domain/taskflow-schema';
+import { resolve } from '@/lib/resolver';
+import { lower } from '@/lib/lower';
+import type { IntentIR } from '@/types/intent-ir';
+import type { AgentRequest, AgentResponse, ConversationTurn, IntentResult } from '@/types/intent';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const SYSTEM_PROMPT = `You are a semantic parser. Given a domain schema in MEL and the user's message, output an Intent IR JSON object.
 
-// Enhanced system prompt for conversational task management
-const TASK_AGENT_SYSTEM_PROMPT = `You are TaskFlow Assistant, a helpful task management assistant. You can:
-1. Answer questions about tasks naturally
-2. Create, update, delete tasks
-3. Perform multiple actions at once
-4. Change view mode (kanban, table, todo list)
-5. Filter tasks by date (due date or created date)
-6. Select a task to view/edit details (opens task detail panel)
-7. Provide helpful suggestions
+## Domain Schema
+\`\`\`mel
+${TASKFLOW_MEL}
+\`\`\`
 
-## Language
-IMPORTANT: Always respond in the SAME LANGUAGE as the user's message.
-- If user writes in Korean, respond in Korean
-- If user writes in English, respond in English
-- If user writes in Japanese, respond in Japanese
-- Detect the user's language and match it
-
-## Response Format
-Always respond with valid JSON:
+## Intent IR Format
+\`\`\`
 {
-  "message": "Natural response message (in user's language)",
-  "effects": [...]
-}
-
-## Effects
-Use effects when modifying data or changing UI state:
-
-1. **snapshot.patch** - Modify tasks or UI state
-   \`\`\`json
-   {
-     "type": "snapshot.patch",
-     "id": "<unique_id>",
-     "ops": [
-       { "op": "append", "path": "data.tasks", "value": { task object } },
-       { "op": "set", "path": "data.tasks.0.status", "value": "done" },
-       { "op": "remove", "path": "data.tasks", "value": "<task_id>" },
-       { "op": "restore", "path": "data.tasks", "value": "<task_id>" },
-       { "op": "set", "path": "state.viewMode", "value": "kanban" }
-     ]
-   }
-   \`\`\`
-
-## View Modes
-- **kanban**: Kanban board (columns by status)
-- **table**: Table view (list format)
-- **todo**: Todo list (with checkboxes)
-
-## Date Filtering
-Filter tasks by date range using state.dateFilter:
-\`\`\`typescript
-{
-  field: "dueDate" | "createdAt",  // REQUIRED! Which date field to filter by
-  type: "today" | "week" | "month" | "custom",
-  startDate?: string,  // ISO date string (required for custom)
-  endDate?: string     // ISO date string (required for custom)
+  "v": "0.2",
+  "force": "DO" | "ASK",
+  "event": { "lemma": "<verb>", "class": "<category>" },
+  "args": { "<ROLE>": <Term> },
+  "time": { "role": "DEADLINE", "value": "<raw expression>" }
 }
 \`\`\`
 
-**IMPORTANT**: The "field" property is REQUIRED. Always include "field": "dueDate" or "field": "createdAt".
+## Event Lemmas
+create (CREATE), update (TRANSFORM), move (TRANSFORM), delete (DESTROY),
+restore (CONTROL), destroy (DESTROY), empty (CONTROL), select (CONTROL),
+show (CONTROL), query (OBSERVE)
 
-To set a date filter:
-\`\`\`json
-{ "op": "set", "path": "state.dateFilter", "value": { "field": "dueDate", "type": "week" } }
-\`\`\`
+## Roles
+TARGET: entity being acted on (task reference)
+THEME: content/value (title, question, view mode)
+DEST: destination (status to move to)
+BENEFICIARY: person (assignee)
+INSTRUMENT: context/description
+SOURCE: tags
 
-To clear a date filter:
-\`\`\`json
-{ "op": "set", "path": "state.dateFilter", "value": null }
-\`\`\`
-
-## Task Selection
-Select a task to open the task detail panel for viewing/editing:
-\`\`\`json
-{ "op": "set", "path": "state.selectedTaskId", "value": "<task_id>" }
-\`\`\`
-
-To close the task detail panel:
-\`\`\`json
-{ "op": "set", "path": "state.selectedTaskId", "value": null }
-\`\`\`
-
-**IMPORTANT**: When user says "select", "choose", "open", "show details of", "view" a specific task, set selectedTaskId to that task's ID. Do NOT change the task status.
-
-## Task Schema
-\`\`\`typescript
-{
-  id: string,           // Generate unique ID like "task-{timestamp}"
-  title: string,
-  description?: string,
-  status: "todo" | "in-progress" | "review" | "done",
-  priority: "low" | "medium" | "high",
-  tags: string[],
-  assignee?: string,
-  dueDate?: string,     // ISO date string
-  createdAt: string,    // ISO date string
-  updatedAt: string     // ISO date string
-}
-\`\`\`
-
-## Examples
-
-### Answering questions (no effects)
-User: "How many tasks do I have?"
-Response:
-{
-  "message": "You have 3 tasks: 1 To Do, 1 In Progress, and 1 Done.",
-  "effects": []
-}
-
-### Creating a single task
-User: "Create a homepage design task"
-Response:
-{
-  "message": "Created the Homepage design task.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{
-      "op": "append",
-      "path": "data.tasks",
-      "value": {
-        "id": "task-1702500000000",
-        "title": "Homepage design",
-        "status": "todo",
-        "priority": "medium",
-        "tags": ["design"],
-        "createdAt": "2024-12-13T10:00:00.000Z",
-        "updatedAt": "2024-12-13T10:00:00.000Z"
-      }
-    }]
-  }]
-}
-
-### Creating multiple tasks at once
-User: "Create 3 tasks for login, signup, and password reset pages"
-Response:
-{
-  "message": "Created 3 tasks: Login page, Signup page, and Password reset page.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [
-      { "op": "append", "path": "data.tasks", "value": { "id": "task-1", "title": "Login page", "status": "todo", "priority": "high", "tags": ["auth"], "createdAt": "...", "updatedAt": "..." } },
-      { "op": "append", "path": "data.tasks", "value": { "id": "task-2", "title": "Signup page", "status": "todo", "priority": "high", "tags": ["auth"], "createdAt": "...", "updatedAt": "..." } },
-      { "op": "append", "path": "data.tasks", "value": { "id": "task-3", "title": "Password reset page", "status": "todo", "priority": "medium", "tags": ["auth"], "createdAt": "...", "updatedAt": "..." } }
-    ]
-  }]
-}
-
-### Changing task status
-User: "Mark the login page task as done"
-Response:
-{
-  "message": "Marked the Login page task as done.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "data.tasks.0.status", "value": "done" }]
-  }]
-}
-
-### Deleting a task (moves to trash)
-User: "Delete the login page task" / "문서작성 태스크 삭제해줘"
-Response:
-{
-  "message": "Moved the Login page task to trash.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "remove", "path": "data.tasks", "value": "task-1702500000000" }]
-  }]
-}
-(Use the actual task ID from the current tasks list. Task is soft-deleted, can be restored from trash.)
-
-### Restoring a deleted task
-User: "Restore the login page task" / "문서작성 태스크 복구해줘"
-Response:
-{
-  "message": "Restored the Login page task.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "restore", "path": "data.tasks", "value": "task-1702500000000" }]
-  }]
-}
-(Use the actual task ID. Only works for deleted tasks in trash.)
-
-### Changing view mode
-User: "Switch to table view" / "Show kanban board" / "Change to list view"
-Response:
-{
-  "message": "Switched to table view.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.viewMode", "value": "table" }]
-  }]
-}
-(viewMode values: "kanban", "table", "todo")
-
-### Filtering by date
-User: "Show tasks due this week"
-Response:
-{
-  "message": "Filtering to show tasks due this week.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.dateFilter", "value": { "field": "dueDate", "type": "week" } }]
-  }]
-}
-
-User: "Show tasks created today"
-Response:
-{
-  "message": "Filtering to show tasks created today.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.dateFilter", "value": { "field": "createdAt", "type": "today" } }]
-  }]
-}
-
-User: "Clear the date filter" / "Show all tasks"
-Response:
-{
-  "message": "Cleared the date filter. Showing all tasks.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.dateFilter", "value": null }]
-  }]
-}
-
-### Selecting a task (opening task detail panel)
-User: "문서작성 선택해줘" / "Select the documentation task" / "Open the login page task"
-Response:
-{
-  "message": "문서작성 태스크를 선택했습니다.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.selectedTaskId", "value": "task-1702500000000" }]
-  }]
-}
-(Use the actual task ID from the current tasks list)
-
-### Closing task detail panel
-User: "Close the task panel" / "Deselect task"
-Response:
-{
-  "message": "Closed the task detail panel.",
-  "effects": [{
-    "type": "snapshot.patch",
-    "id": "effect-1",
-    "ops": [{ "op": "set", "path": "state.selectedTaskId", "value": null }]
-  }]
-}
-
-## Recent Action Context
-The snapshot may include:
-- **lastCreatedTaskIds**: Array of task IDs that were just created in the previous action
-- **lastModifiedTaskId**: The task ID that was just modified in the previous action
-
-When user refers to recently created/modified tasks with phrases like:
-- "what I just added", "just created", "the new task"
-- "the one I just changed", "just modified", "recently updated"
-
-Use these IDs to identify the correct task(s). Select using lastCreatedTaskIds[0] for recently added, or lastModifiedTaskId for recently changed.
-
-## Clarification
-When the user's request is ambiguous (e.g., unclear which task they mean), ask for clarification that matches their ACTUAL INTENT:
-- If user wants to "view/see/show" something → ask "Which task would you like to view?"
-- If user wants to "edit/modify/update" something → ask "Which task would you like to modify?"
-- If user wants to "delete/remove" something → ask "Which task would you like to delete?"
-- If user wants to "complete/finish" something → ask "Which task would you like to mark as done?"
-
-Do NOT assume a different intent than what the user expressed.
+## Term Types
+- { "kind": "literal", "value": "..." }
+- { "kind": "ref", "anchor": "that"|"this"|"last"|"title", "value": "..." }
+- { "kind": "status", "value": "todo"|"in-progress"|"review"|"done" }
+- { "kind": "priority", "value": "low"|"medium"|"high" }
+- { "kind": "view", "value": "kanban"|"todo"|"table"|"trash" }
 
 ## Rules
-1. ALWAYS include "message" field with a natural response in the user's language
-2. Use "effects" for data modifications AND UI state changes (like viewMode)
-3. For questions/queries only, return empty effects []
-4. Generate unique task IDs using timestamp
-5. Set createdAt/updatedAt to current ISO timestamp
-6. Be helpful and conversational
-7. For date filters, ALWAYS include both "field" AND "type" properties (field is REQUIRED)
-8. When user refers to recently added/modified tasks, check lastCreatedTaskIds and lastModifiedTaskId
-`;
+- Output semantic meaning, NOT execution details
+- Keep time.value as raw text ("내일", "next friday") — do NOT compute dates
+- Use ref anchor "that"/"this" for discourse references ("그 작업", "아까 그거")
+- Use ref anchor "title" with value for named references ("발표자료 준비")
+- For questions (force: ASK), put the question in THEME as literal
 
-export async function POST(request: NextRequest) {
+## Examples
+User: "할일 추가: 사과 사기"
+→ {"v":"0.2","force":"DO","event":{"lemma":"create","class":"CREATE"},"args":{"THEME":{"kind":"literal","value":"사과 사기"}}}
+
+User: "그 작업 삭제해"
+→ {"v":"0.2","force":"DO","event":{"lemma":"delete","class":"DESTROY"},"args":{"TARGET":{"kind":"ref","anchor":"that"}}}
+
+User: "발표자료 준비를 완료로 옮겨"
+→ {"v":"0.2","force":"DO","event":{"lemma":"move","class":"TRANSFORM"},"args":{"TARGET":{"kind":"ref","anchor":"title","value":"발표자료 준비"},"DEST":{"kind":"status","value":"done"}}}
+
+User: "내일까지 민수한테 디자인 시안 받기, 급해"
+→ {"v":"0.2","force":"DO","event":{"lemma":"create","class":"CREATE"},"args":{"THEME":{"kind":"literal","value":"디자인 시안 받기"},"BENEFICIARY":{"kind":"literal","value":"민수"},"DEST":{"kind":"priority","value":"high"}},"time":{"role":"DEADLINE","value":"내일"}}`;
+
+function buildMessages(
+  message: string,
+  snapshot: { tasks: AgentRequest['tasks']; viewMode: string },
+  history: ConversationTurn[],
+): OpenAI.ChatCompletionMessageParam[] {
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+  ];
+
+  for (const turn of history) {
+    messages.push({ role: turn.role, content: turn.content });
+  }
+
+  const context = JSON.stringify({
+    today: new Date().toISOString().split('T')[0],
+    snapshot: { tasks: snapshot.tasks, viewMode: snapshot.viewMode },
+  });
+
+  messages.push({ role: 'user', content: `${context}\n\n${message}` });
+  return messages;
+}
+
+export async function POST(request: Request): Promise<NextResponse<AgentResponse>> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { intent: null, message: 'OPENAI_API_KEY is not configured.', executed: false },
+      { status: 503 },
+    );
+  }
+
+  let body: AgentRequest;
   try {
-    const body = await request.json();
-    const { snapshot, instruction, timezone } = body;
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { intent: null, message: 'Invalid request body.', executed: false },
+      { status: 400 },
+    );
+  }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OPENAI_API_KEY not configured' },
-        { status: 500 }
-      );
-    }
+  const { message, tasks, viewMode, history } = body;
+  if (!message || typeof message !== 'string') {
+    return NextResponse.json(
+      { intent: null, message: 'Message is required.', executed: false },
+      { status: 400 },
+    );
+  }
 
-    // Get date context using client's timezone (if provided)
-    const dateCtx = getDateContext(timezone);
+  const client = new OpenAI({ apiKey });
+  const messages = buildMessages(
+    message,
+    { tasks: tasks ?? [], viewMode: viewMode ?? 'kanban' },
+    history ?? [],
+  );
 
-    const taskCount = snapshot?.data?.tasks?.length || 0;
-    const currentViewMode = snapshot?.state?.viewMode || 'kanban';
-    const currentDateFilter = snapshot?.state?.dateFilter;
-    const viewModeNames: Record<string, string> = {
-      kanban: 'Kanban Board',
-      table: 'Table View',
-      todo: 'Todo List',
-    };
-    const tasksSummary = snapshot?.data?.tasks?.map((t: { id: string; title: string; status: string; priority: string; dueDate?: string; createdAt?: string }, index: number) =>
-      `- [${index}] id="${t.id}" title="${t.title}" (${t.status}, ${t.priority}${t.dueDate ? `, due: ${t.dueDate}` : ''})`
-    ).join('\n') || '(none)';
-
-    const dateFilterSummary = currentDateFilter
-      ? `Active date filter: ${currentDateFilter.field} = ${currentDateFilter.type}${currentDateFilter.startDate ? ` (${currentDateFilter.startDate} to ${currentDateFilter.endDate})` : ''}`
-      : 'No date filter active';
-
-    // Recent action context
-    const lastCreatedTaskIds = snapshot?.state?.lastCreatedTaskIds || [];
-    const lastModifiedTaskId = snapshot?.state?.lastModifiedTaskId || null;
-    const recentContextSummary = lastCreatedTaskIds.length > 0 || lastModifiedTaskId
-      ? `Recent action context:
-- lastCreatedTaskIds: ${lastCreatedTaskIds.length > 0 ? JSON.stringify(lastCreatedTaskIds) : 'none'}
-- lastModifiedTaskId: ${lastModifiedTaskId || 'none'}`
-      : '';
-
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-5-mini',
-      messages: [
-        { role: 'system', content: TASK_AGENT_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Today: ${dateCtx.today} (${dateCtx.dayOfWeek})
-Tomorrow: ${dateCtx.tomorrow}
-Current view mode: ${viewModeNames[currentViewMode]}
-${dateFilterSummary}
-Number of tasks: ${taskCount}
-${recentContextSummary}
-
-Current Tasks:
-${tasksSummary}
-
-IMPORTANT: If user mentions "tomorrow", set dueDate to "${dateCtx.tomorrow}"
-
----
-User request: ${instruction}`
-        },
-      ],
+  try {
+    // 1. LLM → Intent IR (non-deterministic boundary)
+    const response = await client.chat.completions.create({
+      model: 'gpt-5.4-nano-2026-03-17',
+      max_completion_tokens: 512,
+      messages,
       response_format: { type: 'json_object' },
-      max_completion_tokens: 2000,
     });
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
-    }
-
-    // Parse the response
-    let decision: AgentDecision & { message?: string };
+    const text = response.choices[0]?.message?.content ?? '';
+    let ir: IntentIR;
     try {
-      const parsed = JSON.parse(content);
-      decision = {
-        message: parsed.message || '',
-        effects: (parsed.effects || []).map((effect: Record<string, unknown>) => ({
-          ...effect,
-          id: effect.id || generateEffectId(),
-        })),
-        trace: {
-          model: 'gpt-5-mini',
-          tokensIn: completion.usage?.prompt_tokens,
-          tokensOut: completion.usage?.completion_tokens,
-          raw: parsed,
-        },
-      };
+      ir = JSON.parse(text) as IntentIR;
     } catch {
-      // If parsing fails, treat raw content as message
-      decision = {
-        message: content,
-        effects: [],
-        trace: {
-          model: 'gpt-5-mini',
-          tokensIn: completion.usage?.prompt_tokens,
-          tokensOut: completion.usage?.completion_tokens,
-          raw: content,
-        },
-      };
+      return NextResponse.json({
+        intent: { kind: 'query', question: message, answer: text } as IntentResult,
+        message: text,
+        executed: false,
+      });
     }
 
-    return NextResponse.json(decision);
+    // Handle ASK force as query
+    if (ir.force === 'ASK' && ir.args?.THEME?.kind === 'literal') {
+      const answer = typeof ir.args.THEME.value === 'string' ? ir.args.THEME.value : '';
+      return NextResponse.json({
+        intent: { kind: 'query', question: message, answer } as IntentResult,
+        message: answer,
+        executed: false,
+      });
+    }
+
+    // 2. Resolve (deterministic)
+    const today = new Date().toISOString().split('T')[0];
+    const resolved = resolve(ir, {
+      tasks: tasks ?? [],
+      history: history ?? [],
+      today,
+    });
+
+    if ('code' in resolved) {
+      return NextResponse.json({
+        intent: null,
+        message: '',
+        executed: false,
+        inquiry: {
+          question: resolved.message,
+          field: resolved.field,
+          candidates: resolved.candidates,
+        },
+      });
+    }
+
+    // 3. Lower (deterministic)
+    const intent = lower(resolved);
+
+    if ('kind' in intent && intent.kind === 'lower_error') {
+      return NextResponse.json({
+        intent: null,
+        message: `Lowering failed: ${(intent as { message: string }).message}`,
+        executed: false,
+      });
+    }
+
+    const responseMessage =
+      intent.kind === 'query' && 'answer' in intent && typeof intent.answer === 'string'
+        ? intent.answer
+        : '';
+
+    return NextResponse.json({ intent, message: responseMessage, executed: false });
   } catch (error) {
-    console.error('Agent API error:', error);
+    const errMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        message: 'An error occurred. Please try again.',
-        effects: [],
-      },
-      { status: 500 }
+      { intent: null, message: `Agent error: ${errMessage}`, executed: false },
+      { status: 502 },
     );
   }
 }

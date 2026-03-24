@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -15,9 +16,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaskFlow - Intent-Native Task Management",
-  description: "A demo app showcasing Intent-Native architecture where LLMs emit validated intents executed by a deterministic runtime. Built on @manifesto-ai/core.",
-  keywords: ["task management", "AI", "LLM", "intent-native", "manifesto", "natural language"],
+  title: "TaskFlow - UI Shell",
+  description:
+    "A preserved TaskFlow UI shell used to prepare the application for a clean rebuild.",
+  keywords: ["task management", "ui shell", "manifesto", "rebuild"],
   authors: [{ name: "Manifesto AI" }],
   icons: {
     icon: [
@@ -27,8 +29,8 @@ export const metadata: Metadata = {
     apple: "/favicon-96x96.png",
   },
   openGraph: {
-    title: "TaskFlow - Intent-Native Task Management",
-    description: "A demo app where LLMs drive UI through validated intents, not direct state mutation.",
+    title: "TaskFlow - UI Shell",
+    description: "A preserved TaskFlow shell used as the starting point for the next rebuild.",
     type: "website",
   },
 };
@@ -36,7 +38,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>

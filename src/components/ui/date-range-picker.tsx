@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { CalendarIcon, X } from 'lucide-react';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
+import { format, endOfDay, startOfDay } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 
 import { cn } from '@/lib/utils';
@@ -13,17 +13,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-
-export type DateFilterField = 'dueDate' | 'createdAt';
-
-export type DateFilterType = 'all' | 'today' | 'week' | 'month' | 'custom';
-
-export interface DateFilter {
-  field: DateFilterField;
-  type: DateFilterType;
-  startDate?: Date;
-  endDate?: Date;
-}
+import {
+  getDateRangeFromType,
+} from '@/lib/date-filter';
+import type { DateFilter, DateFilterField, DateFilterType } from '@/types/taskflow';
 
 interface DateRangePickerProps {
   value?: DateFilter | null;
@@ -38,20 +31,6 @@ const presets = [
   { label: 'This month', type: 'month' as const },
   { label: 'Custom range', type: 'custom' as const },
 ];
-
-function getDateRangeFromType(type: DateFilterType): { startDate: Date; endDate: Date } | null {
-  const now = new Date();
-  switch (type) {
-    case 'today':
-      return { startDate: startOfDay(now), endDate: endOfDay(now) };
-    case 'week':
-      return { startDate: startOfWeek(now, { weekStartsOn: 0 }), endDate: endOfWeek(now, { weekStartsOn: 0 }) };
-    case 'month':
-      return { startDate: startOfMonth(now), endDate: endOfMonth(now) };
-    default:
-      return null;
-  }
-}
 
 export function DateRangePicker({
   value,

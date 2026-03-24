@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/domain/tasks';
+import type { Task } from '@/types/taskflow';
 
 interface TaskCardProps {
   task: Task;
@@ -19,13 +19,6 @@ const priorityColors = {
   low: 'bg-gray-100 text-gray-800',
   medium: 'bg-yellow-100 text-yellow-800',
   high: 'bg-red-100 text-red-800',
-};
-
-const statusColors = {
-  todo: 'bg-slate-100 text-slate-800',
-  'in-progress': 'bg-blue-100 text-blue-800',
-  review: 'bg-purple-100 text-purple-800',
-  done: 'bg-green-100 text-green-800',
 };
 
 export function TaskCard({
@@ -53,7 +46,8 @@ export function TaskCard({
           {showCheckbox && (
             <Checkbox
               checked={task.status === 'done'}
-              onCheckedChange={(checked) => {
+              disabled={!onToggleComplete}
+              onCheckedChange={() => {
                 if (onToggleComplete) {
                   onToggleComplete();
                 }

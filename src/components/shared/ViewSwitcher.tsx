@@ -2,18 +2,21 @@
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayoutGrid, List, Table2, Trash2 } from 'lucide-react';
-import { useTasksStore, type ViewMode } from '@/store/useTasksStore';
+import type { ViewMode } from '@/types/taskflow';
 
-export function ViewSwitcher() {
-  const viewMode = useTasksStore((state) => state.viewMode);
-  const setViewMode = useTasksStore((state) => state.setViewMode);
-  const tasks = useTasksStore((state) => state.tasks);
+interface ViewSwitcherProps {
+  viewMode: ViewMode;
+  deletedCount: number;
+  onChange: (viewMode: ViewMode) => void;
+}
 
-  // Count deleted tasks
-  const deletedCount = tasks.filter((t) => t.deletedAt).length;
-
+export function ViewSwitcher({
+  viewMode,
+  deletedCount,
+  onChange,
+}: ViewSwitcherProps) {
   return (
-    <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+    <Tabs value={viewMode} onValueChange={(value) => onChange(value as ViewMode)}>
       <TabsList>
         <TabsTrigger value="todo" className="gap-2">
           <List className="h-4 w-4" />

@@ -1,8 +1,8 @@
 'use client';
 
 import { List, LayoutGrid, Table2, Trash2 } from 'lucide-react';
-import { useTasksStore, type ViewMode } from '@/store/useTasksStore';
 import { cn } from '@/lib/utils';
+import type { ViewMode } from '@/types/taskflow';
 
 const navItems: Array<{
   mode: ViewMode;
@@ -15,20 +15,24 @@ const navItems: Array<{
   { mode: 'trash', icon: Trash2, label: 'Trash' },
 ];
 
-export function MobileNavigation() {
-  const viewMode = useTasksStore((state) => state.viewMode);
-  const setViewMode = useTasksStore((state) => state.setViewMode);
-  const tasks = useTasksStore((state) => state.tasks);
+interface MobileNavigationProps {
+  viewMode: ViewMode;
+  deletedCount: number;
+  onChange: (viewMode: ViewMode) => void;
+}
 
-  const deletedCount = tasks.filter((t) => t.deletedAt).length;
-
+export function MobileNavigation({
+  viewMode,
+  deletedCount,
+  onChange,
+}: MobileNavigationProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-40 safe-area-bottom sm:hidden">
       <div className="flex justify-around py-2">
         {navItems.map(({ mode, icon: Icon, label }) => (
           <button
             key={mode}
-            onClick={() => setViewMode(mode)}
+            onClick={() => onChange(mode)}
             className={cn(
               'flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors',
               'min-w-[64px] touch-manipulation no-min-height',

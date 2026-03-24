@@ -1,360 +1,172 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { X, Calendar, User, Tag, Flag, Circle, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import type { ReactNode } from 'react';
+import { Calendar, Circle, Flag, Tag, Trash2, User, X } from 'lucide-react';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { useTasksStore } from '@/store/useTasksStore';
-import type { Task } from '@/domain/tasks';
-import { format, parseISO } from 'date-fns';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { Task } from '@/types/taskflow';
 
 interface TaskDetailPanelProps {
-  taskId: string;
+  task: Task | null;
   onClose: () => void;
+  onDelete?: (id: string) => void;
 }
 
-const statusOptions = [
-  { value: 'todo', label: 'To Do', color: 'bg-secondary' },
-  { value: 'in-progress', label: 'In Progress', color: 'bg-primary/20' },
-  { value: 'review', label: 'Review', color: 'bg-purple-500/20' },
-  { value: 'done', label: 'Done', color: 'bg-green-500/20' },
-] as const;
+const statusColors = {
+  todo: 'bg-secondary text-secondary-foreground',
+  'in-progress': 'bg-primary/10 text-primary',
+  review: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+  done: 'bg-green-500/10 text-green-600 dark:text-green-400',
+};
 
-const priorityOptions = [
-  { value: 'low', label: 'Low', color: 'text-muted-foreground' },
-  { value: 'medium', label: 'Medium', color: 'text-yellow-600' },
-  { value: 'high', label: 'High', color: 'text-red-600' },
-] as const;
+const priorityColors = {
+  low: 'bg-secondary text-secondary-foreground',
+  medium: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+  high: 'bg-red-500/10 text-red-600 dark:text-red-400',
+};
 
-// Controlled text input that syncs with external value changes
-function ControlledInput({
-  value,
-  onChange,
-  ...props
-}: {
-  value: string;
-  onChange: (value: string) => void;
-} & Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange'>) {
-  const [localValue, setLocalValue] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const isFocused = useRef(false);
-
-  // Sync external value when not focused
-  useEffect(() => {
-    if (!isFocused.current) {
-      setLocalValue(value);
-    }
-  }, [value]);
-
-  return (
-    <Input
-      ref={inputRef}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onFocus={() => { isFocused.current = true; }}
-      onBlur={() => {
-        isFocused.current = false;
-        if (localValue !== value) {
-          onChange(localValue);
-        }
-      }}
-      {...props}
-    />
-  );
-}
-
-// Controlled textarea that syncs with external value changes
-function ControlledTextarea({
-  value,
-  onChange,
-  ...props
-}: {
-  value: string;
-  onChange: (value: string) => void;
-} & Omit<React.ComponentProps<typeof Textarea>, 'value' | 'onChange'>) {
-  const [localValue, setLocalValue] = useState(value);
-  const isFocused = useRef(false);
-
-  // Sync external value when not focused
-  useEffect(() => {
-    if (!isFocused.current) {
-      setLocalValue(value);
-    }
-  }, [value]);
-
-  return (
-    <Textarea
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onFocus={() => { isFocused.current = true; }}
-      onBlur={() => {
-        isFocused.current = false;
-        if (localValue !== value) {
-          onChange(localValue);
-        }
-      }}
-      {...props}
-    />
-  );
-}
-
-export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
-  const tasks = useTasksStore((s) => s.tasks);
-  const updateTask = useTasksStore((s) => s.updateTask);
-  const removeTask = useTasksStore((s) => s.removeTask);
-
-  const task = tasks.find((t) => t.id === taskId);
-
-  // Only local state for new tag input
-  const [newTag, setNewTag] = useState('');
-
-  const handleUpdate = useCallback((changes: Partial<Task>) => {
-    if (task) {
-      updateTask(task.id, { ...changes, updatedAt: new Date().toISOString() });
-    }
-  }, [task, updateTask]);
-
-  const handleAddTag = useCallback(() => {
-    if (task && newTag.trim() && !task.tags.includes(newTag.trim())) {
-      updateTask(task.id, {
-        tags: [...task.tags, newTag.trim()],
-        updatedAt: new Date().toISOString(),
-      });
-      setNewTag('');
-    }
-  }, [newTag, task, updateTask]);
-
-  const handleRemoveTag = useCallback((tagToRemove: string) => {
-    if (task) {
-      updateTask(task.id, {
-        tags: task.tags.filter((t) => t !== tagToRemove),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-  }, [task, updateTask]);
-
-  const handleDelete = useCallback(() => {
-    if (task && confirm('Move this task to trash?')) {
-      removeTask(task.id);
-      onClose();
-    }
-  }, [task, removeTask, onClose]);
-
+export function TaskDetailPanel({ task, onClose, onDelete }: TaskDetailPanelProps) {
   if (!task) {
     return (
-      <div className="flex flex-col h-full bg-background">
-        <div className="flex h-12 items-center justify-between border-b px-3 bg-muted/50">
-          <span className="font-medium text-sm">Task not found</span>
+      <div className="flex h-full flex-col bg-background">
+        <div className="flex h-12 items-center justify-between border-b bg-muted/50 px-3">
+          <span className="text-sm font-medium">Task details</span>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
+        </div>
+        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+          Select a task to inspect the preserved UI shell.
         </div>
       </div>
     );
   }
 
-  const dueDate = task.dueDate ? parseISO(task.dueDate) : undefined;
-
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header */}
-      <div className="flex h-12 sm:h-12 items-center justify-between border-b px-3 sm:px-3 bg-muted/50">
-        <span className="font-medium text-sm text-muted-foreground">Task Details</span>
+    <div className="flex h-full flex-col bg-background">
+      <div className="flex h-12 items-center justify-between border-b bg-muted/50 px-3">
+        <span className="text-sm font-medium text-muted-foreground">Task details</span>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 sm:h-8 sm:w-8 text-destructive hover:text-destructive"
-            onClick={handleDelete}
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            onClick={() => {
+              if (task) {
+                onDelete?.(task.id);
+                onClose();
+              }
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8" onClick={onClose}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4 sm:p-4 space-y-4 sm:space-y-4">
-        {/* Title */}
-        <div>
-          <ControlledInput
-            value={task.title}
-            onChange={(value) => handleUpdate({ title: value })}
-            placeholder="Task title"
-            className="text-lg font-medium border-none shadow-none px-0 h-auto focus-visible:ring-0"
-          />
+      <div className="flex-1 space-y-5 overflow-auto p-4">
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-xl font-semibold">{task.title}</h2>
+            {task.description && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {task.description}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className={cn('text-xs', statusColors[task.status])}>
+              {task.status}
+            </Badge>
+            <Badge variant="outline" className={cn('text-xs', priorityColors[task.priority])}>
+              {task.priority}
+            </Badge>
+            {task.deletedAt ? (
+              <Badge variant="outline" className="text-xs text-destructive">
+                deleted
+              </Badge>
+            ) : null}
+          </div>
         </div>
 
-        {/* Properties */}
-        <div className="space-y-4 sm:space-y-3">
-          {/* Status */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
-              <Circle className="h-4 w-4" />
-              <span>Status</span>
-            </div>
-            <Select
-              value={task.status}
-              onValueChange={(value) => handleUpdate({ status: value as Task['status'] })}
-            >
-              <SelectTrigger className="w-full sm:w-40 h-10 sm:h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    <div className="flex items-center gap-2">
-                      <div className={cn('w-2 h-2 rounded-full', opt.color)} />
-                      {opt.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Priority */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
-              <Flag className="h-4 w-4" />
-              <span>Priority</span>
-            </div>
-            <Select
-              value={task.priority}
-              onValueChange={(value) => handleUpdate({ priority: value as Task['priority'] })}
-            >
-              <SelectTrigger className="w-full sm:w-40 h-10 sm:h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {priorityOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    <span className={opt.color}>{opt.label}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Assignee */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span>Assignee</span>
-            </div>
-            <ControlledInput
-              value={task.assignee || ''}
-              onChange={(value) => handleUpdate({ assignee: value || undefined })}
-              placeholder="Unassigned"
-              className="w-full sm:w-40 h-10 sm:h-8"
-            />
-          </div>
-
-          {/* Due Date */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              <span>Due date</span>
-            </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full sm:w-40 h-10 sm:h-8 justify-start text-left font-normal',
-                    !dueDate && 'text-muted-foreground'
-                  )}
-                >
-                  {dueDate ? format(dueDate, 'MMM d, yyyy') : 'No date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <CalendarComponent
-                  mode="single"
-                  selected={dueDate}
-                  onSelect={(date) => handleUpdate({ dueDate: date?.toISOString() })}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Tags */}
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
-            <div className="w-full sm:w-24 flex items-center gap-2 text-sm text-muted-foreground sm:pt-1">
+        <div className="space-y-4 rounded-lg border bg-card p-4">
+          <DetailRow
+            icon={<Circle className="h-4 w-4" />}
+            label="Status"
+            value={task.status}
+          />
+          <DetailRow
+            icon={<Flag className="h-4 w-4" />}
+            label="Priority"
+            value={task.priority}
+          />
+          <DetailRow
+            icon={<User className="h-4 w-4" />}
+            label="Assignee"
+            value={task.assignee ?? 'Unassigned'}
+          />
+          <DetailRow
+            icon={<Calendar className="h-4 w-4" />}
+            label="Due date"
+            value={task.dueDate ? format(parseISO(task.dueDate), 'MMM d, yyyy') : 'No date'}
+          />
+          <div className="flex items-start gap-3 text-sm">
+            <span className="mt-0.5 text-muted-foreground">
               <Tag className="h-4 w-4" />
-              <span>Tags</span>
-            </div>
-            <div className="flex-1 space-y-2">
-              <div className="flex flex-wrap gap-1.5 sm:gap-1">
-                {task.tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="text-xs cursor-pointer hover:bg-destructive/20 py-1 px-2"
-                    onClick={() => handleRemoveTag(tag)}
-                  >
-                    {tag} <X className="h-3 w-3 ml-1" />
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddTag();
-                    }
-                  }}
-                  placeholder="Add a tag"
-                  className="h-10 sm:h-8 text-sm sm:text-xs flex-1"
-                />
-                <Button size="sm" variant="outline" className="h-10 sm:h-8 px-4" onClick={handleAddTag}>
-                  Add
-                </Button>
+            </span>
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Tags
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {task.tags.length > 0 ? (
+                  task.tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted-foreground">No tags</span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Description */}
-        <div className="pt-4 border-t">
-          <label className="text-sm font-medium text-muted-foreground mb-2 block">
-            Description
-          </label>
-          <ControlledTextarea
-            value={task.description || ''}
-            onChange={(value) => handleUpdate({ description: value || undefined })}
-            placeholder="Add a description..."
-            className="min-h-[120px] resize-none text-base sm:text-sm"
-          />
-        </div>
-
-        {/* Metadata */}
-        <div className="pt-4 border-t text-xs text-muted-foreground space-y-1">
+        <section className="rounded-lg border bg-card p-4 text-xs text-muted-foreground">
           <p>Created: {format(parseISO(task.createdAt), 'MMM d, yyyy h:mm a')}</p>
-          <p>Updated: {format(parseISO(task.updatedAt), 'MMM d, yyyy h:mm a')}</p>
-        </div>
+          <p className="mt-2">Updated: {format(parseISO(task.updatedAt), 'MMM d, yyyy h:mm a')}</p>
+          {task.deletedAt ? (
+            <p className="mt-2">
+              Deleted {formatDistanceToNow(parseISO(task.deletedAt), { addSuffix: true })}
+            </p>
+          ) : null}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+interface DetailRowProps {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}
+
+function DetailRow({ icon, label, value }: DetailRowProps) {
+  return (
+    <div className="flex items-start gap-3 text-sm">
+      <span className="mt-0.5 text-muted-foreground">{icon}</span>
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p>{value}</p>
       </div>
     </div>
   );

@@ -14,8 +14,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useTasksStore } from '@/store/useTasksStore';
 import { cn } from '@/lib/utils';
+import type { Task } from '@/types/taskflow';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
 const priorityColors = {
@@ -24,14 +24,15 @@ const priorityColors = {
   high: 'bg-red-500/10 text-red-600 dark:text-red-400',
 };
 
-export function TrashView() {
-  const tasks = useTasksStore((state) => state.tasks);
-  const restoreTask = useTasksStore((state) => state.restoreTask);
-  const permanentlyDeleteTask = useTasksStore((state) => state.permanentlyDeleteTask);
-  const emptyTrash = useTasksStore((state) => state.emptyTrash);
+interface TrashViewProps {
+  tasks: Task[];
+  onRestore?: (id: string) => void;
+  onPermanentlyDelete?: (id: string) => void;
+  onEmptyTrash?: () => void;
+}
 
-  // Get only deleted tasks
-  const deletedTasks = tasks.filter((t) => t.deletedAt);
+export function TrashView({ tasks, onRestore, onPermanentlyDelete, onEmptyTrash }: TrashViewProps) {
+  const deletedTasks = tasks.filter((task) => task.deletedAt !== null);
 
   if (deletedTasks.length === 0) {
     return (
@@ -72,7 +73,7 @@ export function TrashView() {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={emptyTrash}
+                onClick={() => onEmptyTrash?.()}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 Delete All
@@ -106,7 +107,7 @@ export function TrashView() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => restoreTask(task.id)}
+                onClick={() => onRestore?.(task.id)}
               >
                 <RotateCcw className="h-4 w-4 mr-1" />
                 Restore
@@ -121,14 +122,14 @@ export function TrashView() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Permanently</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to permanently delete "{task.title}"?
+                      Are you sure you want to permanently delete {task.title}?
                       This action cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                      onClick={() => permanentlyDeleteTask(task.id)}
+                      onClick={() => onPermanentlyDelete?.(task.id)}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
                       Delete
